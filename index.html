@@ -1,0 +1,546 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#ff7452">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>おてつだい貯金</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <style>
+    :root {
+      --ink: #2e2927;
+      --muted: #756c68;
+      --cream: #fff9ef;
+      --paper: #fffdf8;
+      --orange: #ff7452;
+      --orange-dark: #e75638;
+      --yellow: #ffd769;
+      --green: #65bd8a;
+      --blue: #69aee8;
+      --line: #eadfd5;
+      --shadow: 0 10px 28px rgba(105, 69, 44, .12);
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      font-family: "Hiragino Maru Gothic ProN", "Yu Gothic", system-ui, sans-serif;
+      background:
+        radial-gradient(circle at 10% 0%, rgba(255, 215, 105, .36), transparent 28%),
+        radial-gradient(circle at 100% 20%, rgba(105, 174, 232, .18), transparent 30%),
+        var(--cream);
+    }
+    button, input { font: inherit; }
+    button { color: inherit; }
+    .app {
+      width: min(100%, 540px);
+      min-height: 100vh;
+      margin: 0 auto;
+      padding: max(18px, env(safe-area-inset-top)) 18px calc(100px + env(safe-area-inset-bottom));
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 18px;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand-mark {
+      display: grid;
+      place-items: center;
+      width: 43px;
+      height: 43px;
+      border-radius: 15px;
+      background: var(--orange);
+      color: white;
+      font-size: 23px;
+      transform: rotate(-4deg);
+      box-shadow: 0 6px 0 rgba(181, 62, 36, .16);
+    }
+    h1 { margin: 0; font-size: 20px; letter-spacing: .04em; }
+    .today { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
+    .parent-button {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 9px 13px;
+      background: rgba(255,255,255,.76);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .balance-card {
+      position: relative;
+      overflow: hidden;
+      padding: 24px;
+      border-radius: 28px;
+      background: linear-gradient(135deg, #ff805c, #ff674d);
+      color: white;
+      box-shadow: 0 14px 34px rgba(226, 84, 53, .25);
+    }
+    .balance-card::after {
+      content: "¥";
+      position: absolute;
+      right: -5px;
+      bottom: -47px;
+      color: rgba(255,255,255,.13);
+      font: 900 150px/1 Arial, sans-serif;
+      transform: rotate(10deg);
+    }
+    .balance-label { margin: 0; font-size: 13px; font-weight: 700; letter-spacing: .08em; }
+    .balance {
+      position: relative;
+      z-index: 1;
+      margin: 5px 0 4px;
+      font-size: clamp(42px, 12vw, 62px);
+      font-weight: 900;
+      letter-spacing: -.04em;
+      line-height: 1.1;
+    }
+    .balance small { margin-left: 4px; font-size: 20px; letter-spacing: 0; }
+    .balance-meta { position: relative; z-index: 1; margin: 0; font-size: 12px; opacity: .9; }
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      margin: 25px 2px 12px;
+    }
+    h2 { margin: 0; font-size: 18px; }
+    .section-note { margin: 0; color: var(--muted); font-size: 11px; }
+    .chores { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .chore {
+      position: relative;
+      min-height: 130px;
+      padding: 17px 14px 14px;
+      border: 1px solid rgba(235, 221, 210, .9);
+      border-radius: 22px;
+      background: var(--paper);
+      box-shadow: 0 6px 18px rgba(95, 67, 47, .08);
+      text-align: left;
+      cursor: pointer;
+      transition: transform .12s ease, box-shadow .12s ease;
+    }
+    .chore:active { transform: scale(.97); box-shadow: 0 2px 8px rgba(95,67,47,.08); }
+    .chore-icon {
+      display: grid;
+      place-items: center;
+      width: 47px;
+      height: 47px;
+      margin-bottom: 11px;
+      border-radius: 16px;
+      background: #fff0db;
+      font-size: 26px;
+    }
+    .chore:nth-child(2) .chore-icon { background: #e9f6ed; }
+    .chore:nth-child(3) .chore-icon { background: #edf4fc; }
+    .chore-name { display: block; padding-right: 42px; font-size: 14px; font-weight: 800; line-height: 1.35; }
+    .price {
+      position: absolute;
+      right: 12px;
+      bottom: 12px;
+      padding: 5px 9px;
+      border-radius: 999px;
+      background: #fff1ed;
+      color: var(--orange-dark);
+      font-size: 12px;
+      font-weight: 900;
+    }
+    .cleanup {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      min-height: 94px;
+      gap: 13px;
+    }
+    .cleanup .chore-icon { flex: 0 0 auto; margin: 0; background: #f1edff; }
+    .cleanup .chore-name { font-size: 16px; }
+    .cleanup .price { position: static; margin-left: auto; background: #f5f0ff; color: #7655b2; }
+    .history-list { display: grid; gap: 9px; }
+    .empty {
+      padding: 22px;
+      border: 1px dashed #d9cbc0;
+      border-radius: 18px;
+      color: var(--muted);
+      text-align: center;
+      font-size: 13px;
+    }
+    .history-item {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 17px;
+      background: rgba(255,255,255,.72);
+    }
+    .history-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 0 5px rgba(101,189,138,.13);
+    }
+    .history-item.payout .history-dot { background: var(--orange); box-shadow: 0 0 0 5px rgba(255,116,82,.13); }
+    .history-main { min-width: 0; flex: 1; }
+    .history-name { display: block; overflow: hidden; font-size: 13px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+    .history-date { display: block; margin-top: 2px; color: var(--muted); font-size: 10px; }
+    .history-value { font-size: 14px; font-weight: 900; color: var(--green); }
+    .history-item.payout .history-value { color: var(--orange-dark); }
+
+    dialog {
+      width: min(calc(100% - 28px), 500px);
+      max-height: min(82vh, 720px);
+      margin: auto;
+      padding: 0;
+      border: 0;
+      border-radius: 28px;
+      background: var(--paper);
+      box-shadow: 0 24px 80px rgba(50,34,25,.3);
+    }
+    dialog::backdrop { background: rgba(47, 38, 34, .5); backdrop-filter: blur(3px); }
+    .modal { padding: 22px; }
+    .modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+    .modal-head h2 { font-size: 20px; }
+    .close {
+      width: 38px;
+      height: 38px;
+      border: 0;
+      border-radius: 50%;
+      background: #f3ebe4;
+      font-weight: 900;
+      cursor: pointer;
+    }
+    .cleanup-list { display: grid; gap: 10px; max-height: 62vh; overflow: auto; }
+    .cleanup-option {
+      display: flex;
+      align-items: center;
+      min-height: 58px;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 17px;
+      background: white;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .cleanup-option:active { transform: scale(.985); }
+    .cleanup-option span:last-child { margin-left: auto; color: var(--orange-dark); }
+    .pin-copy { color: var(--muted); font-size: 13px; line-height: 1.65; }
+    .pin-input {
+      width: 100%;
+      margin: 5px 0 12px;
+      padding: 15px;
+      border: 2px solid var(--line);
+      border-radius: 15px;
+      outline: none;
+      text-align: center;
+      font-size: 24px;
+      font-weight: 900;
+      letter-spacing: .3em;
+    }
+    .pin-input:focus { border-color: var(--orange); }
+    .primary, .danger, .secondary {
+      width: 100%;
+      padding: 14px;
+      border: 0;
+      border-radius: 15px;
+      font-weight: 900;
+      cursor: pointer;
+    }
+    .primary { background: var(--orange); color: white; }
+    .danger { margin-top: 12px; background: #ffe9e4; color: #c7452d; }
+    .secondary { margin-top: 9px; background: #eee8e3; color: var(--ink); }
+    .parent-panel { display: none; }
+    .parent-panel.active { display: block; }
+    .parent-stat {
+      padding: 17px;
+      border-radius: 18px;
+      background: #fff1ed;
+      text-align: center;
+    }
+    .parent-stat strong { display: block; margin-top: 3px; color: var(--orange-dark); font-size: 29px; }
+    .parent-divider { height: 1px; margin: 18px 0; background: var(--line); }
+    .setting-title { margin: 0 0 7px; font-size: 14px; font-weight: 900; }
+    .new-pin { font-size: 17px; letter-spacing: .2em; }
+    .toast {
+      position: fixed;
+      z-index: 10;
+      left: 50%;
+      bottom: calc(22px + env(safe-area-inset-bottom));
+      display: flex;
+      align-items: center;
+      width: min(calc(100% - 28px), 480px);
+      padding: 13px 13px 13px 16px;
+      border-radius: 17px;
+      background: #2e2927;
+      color: white;
+      box-shadow: var(--shadow);
+      transform: translate(-50%, 150%);
+      transition: transform .24s ease;
+    }
+    .toast.show { transform: translate(-50%, 0); }
+    .toast-message { flex: 1; font-size: 13px; font-weight: 700; }
+    .undo { border: 0; background: transparent; color: var(--yellow); font-size: 12px; font-weight: 900; cursor: pointer; }
+    .error { min-height: 19px; margin: -4px 0 7px; color: #c7452d; font-size: 12px; text-align: center; }
+
+    @media (min-width: 560px) {
+      .app { padding-left: 24px; padding-right: 24px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header>
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">★</div>
+        <div>
+          <h1>おてつだい貯金</h1>
+          <p class="today" id="today"></p>
+        </div>
+      </div>
+      <button class="parent-button" id="open-parent" type="button">🔒 おうちの人</button>
+    </header>
+
+    <section class="balance-card" aria-live="polite">
+      <p class="balance-label">いま たまっているお金</p>
+      <p class="balance"><span id="balance">0</span><small>円</small></p>
+      <p class="balance-meta"><span id="count">0</span>回のおてつだい、ありがとう！</p>
+    </section>
+
+    <div class="section-head">
+      <h2>なにをした？</h2>
+      <p class="section-note">タップでお金がたまるよ</p>
+    </div>
+    <section class="chores" aria-label="お手伝い一覧">
+      <button class="chore" type="button" data-chore="炊飯" data-price="20">
+        <span class="chore-icon" aria-hidden="true">🍚</span>
+        <span class="chore-name">炊飯</span>
+        <span class="price">+20円</span>
+      </button>
+      <button class="chore" type="button" data-chore="タオルたたみ" data-price="20">
+        <span class="chore-icon" aria-hidden="true">🧺</span>
+        <span class="chore-name">タオルたたみ</span>
+        <span class="price">+20円</span>
+      </button>
+      <button class="chore" type="button" data-chore="ハイボール作り" data-price="10">
+        <span class="chore-icon" aria-hidden="true">🥤</span>
+        <span class="chore-name">ハイボール作り</span>
+        <span class="price">+10円</span>
+      </button>
+      <button class="chore cleanup" id="open-cleanup" type="button">
+        <span class="chore-icon" aria-hidden="true">✨</span>
+        <span class="chore-name">お片付け</span>
+        <span class="price">種類をえらぶ ›</span>
+      </button>
+    </section>
+
+    <div class="section-head">
+      <h2>さいきんの記録</h2>
+    </div>
+    <section class="history-list" id="history" aria-label="最近の記録"></section>
+  </main>
+
+  <dialog id="cleanup-dialog">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>どこを片付けた？</h2>
+        <button class="close" type="button" data-close="cleanup-dialog" aria-label="閉じる">×</button>
+      </div>
+      <div class="cleanup-list">
+        <button class="cleanup-option" type="button" data-chore="玄関" data-price="20"><span>🚪 玄関</span><span>+20円</span></button>
+        <button class="cleanup-option" type="button" data-chore="テーブル（大）" data-price="10"><span>🧽 テーブル（大）</span><span>+10円</span></button>
+        <button class="cleanup-option" type="button" data-chore="テーブル（小）" data-price="10"><span>🧽 テーブル（小）</span><span>+10円</span></button>
+        <button class="cleanup-option" type="button" data-chore="フロ掃除" data-price="20"><span>🛁 フロ掃除</span><span>+20円</span></button>
+        <button class="cleanup-option" type="button" data-chore="掃除機（1階）" data-price="20"><span>🧹 掃除機（1階）</span><span>+20円</span></button>
+        <button class="cleanup-option" type="button" data-chore="掃除機（2階）" data-price="20"><span>🧹 掃除機（2階）</span><span>+20円</span></button>
+        <button class="cleanup-option" type="button" data-chore="洗濯物取り込み" data-price="10"><span>👕 洗濯物取り込み</span><span>+10円</span></button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="parent-dialog">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>おうちの人の画面</h2>
+        <button class="close" type="button" data-close="parent-dialog" aria-label="閉じる">×</button>
+      </div>
+      <div id="pin-panel">
+        <p class="pin-copy">暗証番号を入力してください。<br>最初の暗証番号は <strong>1234</strong> です。</p>
+        <input class="pin-input" id="pin" type="password" inputmode="numeric" maxlength="4" autocomplete="off" aria-label="暗証番号">
+        <p class="error" id="pin-error"></p>
+        <button class="primary" id="unlock" type="button">ひらく</button>
+      </div>
+      <div class="parent-panel" id="parent-panel">
+        <div class="parent-stat">今回のお支払い金額<strong><span id="parent-balance">0</span>円</strong></div>
+        <button class="danger" id="payout" type="button">支払い済みにして 0円にする</button>
+        <div class="parent-divider"></div>
+        <p class="setting-title">暗証番号を変更</p>
+        <input class="pin-input new-pin" id="new-pin" type="password" inputmode="numeric" maxlength="4" placeholder="新しい4桁" autocomplete="off" aria-label="新しい暗証番号">
+        <button class="secondary" id="change-pin" type="button">暗証番号を変更する</button>
+        <p class="error" id="setting-message"></p>
+      </div>
+    </div>
+  </dialog>
+
+  <div class="toast" id="toast" role="status">
+    <span class="toast-message" id="toast-message"></span>
+    <button class="undo" id="undo" type="button">取り消す</button>
+  </div>
+
+  <script>
+    const STORAGE_KEY = "otetsudai-bank-v1";
+    const PIN_KEY = "otetsudai-parent-pin";
+    const state = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{"entries":[]}');
+    let lastAddedId = null;
+    let toastTimer = null;
+
+    const yen = value => new Intl.NumberFormat("ja-JP").format(value);
+    const currentEntries = () => {
+      const lastPayout = [...state.entries].reverse().findIndex(entry => entry.type === "payout");
+      return lastPayout < 0 ? state.entries.filter(entry => entry.type === "chore") :
+        state.entries.slice(state.entries.length - lastPayout).filter(entry => entry.type === "chore");
+    };
+    const currentBalance = () => currentEntries().reduce((sum, entry) => sum + entry.price, 0);
+
+    function save() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
+
+    function formatDate(iso, withTime = false) {
+      const date = new Date(iso);
+      return new Intl.DateTimeFormat("ja-JP", {
+        month: "short", day: "numeric",
+        ...(withTime ? { hour: "2-digit", minute: "2-digit" } : {})
+      }).format(date);
+    }
+
+    function render() {
+      const entries = currentEntries();
+      document.querySelector("#balance").textContent = yen(currentBalance());
+      document.querySelector("#count").textContent = entries.length;
+      document.querySelector("#parent-balance").textContent = yen(currentBalance());
+      const history = document.querySelector("#history");
+      const recent = [...state.entries].reverse().slice(0, 8);
+      if (!recent.length) {
+        history.innerHTML = '<div class="empty">お手伝いをすると、ここに記録が出るよ</div>';
+        return;
+      }
+      history.innerHTML = recent.map(entry => entry.type === "payout" ? `
+        <div class="history-item payout">
+          <span class="history-dot"></span>
+          <span class="history-main"><span class="history-name">おこづかいを受け取りました</span><span class="history-date">${formatDate(entry.date, true)}</span></span>
+          <span class="history-value">-${yen(entry.amount)}円</span>
+        </div>` : `
+        <div class="history-item">
+          <span class="history-dot"></span>
+          <span class="history-main"><span class="history-name">${entry.name}</span><span class="history-date">${formatDate(entry.date, true)}</span></span>
+          <span class="history-value">+${yen(entry.price)}円</span>
+        </div>`).join("");
+    }
+
+    function showToast(message, canUndo = true) {
+      clearTimeout(toastTimer);
+      document.querySelector("#toast-message").textContent = message;
+      document.querySelector("#undo").style.display = canUndo ? "" : "none";
+      document.querySelector("#toast").classList.add("show");
+      toastTimer = setTimeout(() => document.querySelector("#toast").classList.remove("show"), 3600);
+    }
+
+    function addChore(name, price) {
+      const entry = { id: crypto.randomUUID(), type: "chore", name, price, date: new Date().toISOString() };
+      state.entries.push(entry);
+      lastAddedId = entry.id;
+      save();
+      render();
+      showToast(`${name} ＋${price}円！`);
+    }
+
+    document.querySelector("#today").textContent = new Intl.DateTimeFormat("ja-JP", {
+      year: "numeric", month: "long", day: "numeric", weekday: "short"
+    }).format(new Date());
+
+    document.querySelectorAll("[data-chore]").forEach(button => {
+      button.addEventListener("click", () => {
+        addChore(button.dataset.chore, Number(button.dataset.price));
+        button.closest("dialog")?.close();
+      });
+    });
+
+    document.querySelector("#open-cleanup").addEventListener("click", () => {
+      document.querySelector("#cleanup-dialog").showModal();
+    });
+    document.querySelectorAll("[data-close]").forEach(button => {
+      button.addEventListener("click", () => document.querySelector(`#${button.dataset.close}`).close());
+    });
+
+    document.querySelector("#undo").addEventListener("click", () => {
+      if (!lastAddedId) return;
+      const index = state.entries.findIndex(entry => entry.id === lastAddedId);
+      if (index >= 0) state.entries.splice(index, 1);
+      lastAddedId = null;
+      save();
+      render();
+      document.querySelector("#toast").classList.remove("show");
+    });
+
+    const parentDialog = document.querySelector("#parent-dialog");
+    document.querySelector("#open-parent").addEventListener("click", () => {
+      document.querySelector("#pin-panel").style.display = "";
+      document.querySelector("#parent-panel").classList.remove("active");
+      document.querySelector("#pin").value = "";
+      document.querySelector("#pin-error").textContent = "";
+      parentDialog.showModal();
+      setTimeout(() => document.querySelector("#pin").focus(), 100);
+    });
+
+    function unlockParent() {
+      const savedPin = localStorage.getItem(PIN_KEY) || "1234";
+      if (document.querySelector("#pin").value !== savedPin) {
+        document.querySelector("#pin-error").textContent = "暗証番号が違います";
+        return;
+      }
+      document.querySelector("#pin-panel").style.display = "none";
+      document.querySelector("#parent-panel").classList.add("active");
+      render();
+    }
+    document.querySelector("#unlock").addEventListener("click", unlockParent);
+    document.querySelector("#pin").addEventListener("keydown", event => {
+      if (event.key === "Enter") unlockParent();
+    });
+
+    document.querySelector("#payout").addEventListener("click", () => {
+      const amount = currentBalance();
+      if (!amount) {
+        document.querySelector("#setting-message").textContent = "現在の残高は0円です";
+        return;
+      }
+      if (!confirm(`${yen(amount)}円を支払い済みにして、残高を0円にしますか？`)) return;
+      state.entries.push({ id: crypto.randomUUID(), type: "payout", amount, date: new Date().toISOString() });
+      save();
+      render();
+      parentDialog.close();
+      showToast(`${yen(amount)}円を受け取りました！`, false);
+    });
+
+    document.querySelector("#change-pin").addEventListener("click", () => {
+      const value = document.querySelector("#new-pin").value;
+      const message = document.querySelector("#setting-message");
+      if (!/^\d{4}$/.test(value)) {
+        message.textContent = "数字4桁で入力してください";
+        return;
+      }
+      localStorage.setItem(PIN_KEY, value);
+      document.querySelector("#new-pin").value = "";
+      message.style.color = "#32845a";
+      message.textContent = "暗証番号を変更しました";
+    });
+
+    render();
+    if ("serviceWorker" in navigator && location.protocol !== "file:") {
+      navigator.serviceWorker.register("sw.js");
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+{
+  "name": "おてつだい貯金",
+  "short_name": "おてつだい",
+  "description": "お手伝いをしておこづかいを貯める家族用アプリ",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#fff9ef",
+  "theme_color": "#ff7452",
+  "lang": "ja"
+}
