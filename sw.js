@@ -1,4 +1,4 @@
-const CACHE = "otetsudai-bank-v10";
+const CACHE = "otetsudai-bank-v11";
 const FILES = ["./", "./index.html", "./app.js", "./manifest.webmanifest"];
 
 self.addEventListener("install", event => {

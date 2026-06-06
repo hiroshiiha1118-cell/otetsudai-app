@@ -90,16 +90,20 @@ function formatDate(iso, withTime = false) {
   }).format(date);
 }
 
-function currentEntries() {
-  if (!activeMemberId) return [];
+function unpaidEntriesForMember(memberId) {
+  if (!memberId) return [];
   const memberEntries = state.entries
-    .filter(entry => entry.memberId === activeMemberId)
+    .filter(entry => entry.memberId === memberId)
     .sort((first, second) => new Date(first.date) - new Date(second.date));
   const lastPayout = [...memberEntries].reverse().findIndex(entry => entry.type === "payout");
   const current = lastPayout < 0
     ? memberEntries
     : memberEntries.slice(memberEntries.length - lastPayout);
   return current.filter(entry => entry.type === "chore");
+}
+
+function currentEntries() {
+  return unpaidEntriesForMember(activeMemberId);
 }
 
 function currentBalance() {
@@ -262,15 +266,51 @@ function renderCalendar() {
   document.querySelector("#calendar-grid").innerHTML = days.join("");
 }
 
+function renderBreakdown() {
+  const container = document.querySelector("#breakdown-list");
+  if (!state.members.length) {
+    container.innerHTML = '<div class="empty">名前がまだ登録されていません</div>';
+    return;
+  }
+  container.innerHTML = state.members.map(member => {
+    const entries = unpaidEntriesForMember(member.id);
+    const total = entries.reduce((sum, entry) => sum + entry.price, 0);
+    const rows = entries.length
+      ? [...entries].reverse().map(entry => `
+          <div class="breakdown-row">
+            <span class="breakdown-chore">
+              ${entry.name}
+              <span class="breakdown-date">${formatDate(entry.date, true)}</span>
+            </span>
+            <span class="breakdown-price">+${yen(entry.price)}円</span>
+          </div>
+        `).join("")
+      : '<div class="breakdown-empty">現在たまっているお金はありません</div>';
+    return `
+      <section class="breakdown-member">
+        <div class="breakdown-member-head">
+          <span>👤 ${member.name}</span>
+          <span class="breakdown-total">${yen(total)}円</span>
+        </div>
+        <div class="breakdown-rows">${rows}</div>
+      </section>
+    `;
+  }).join("");
+}
+
 function render() {
   const member = activeMember();
   document.querySelector("#switch-user").textContent = member ? `👤 ${member.name}` : "👤 名前を選ぶ";
+  document.querySelector("#balance-label").textContent = member
+    ? `${member.name}の いま たまっているお金`
+    : "いま たまっているお金";
   document.querySelector("#balance").textContent = yen(currentBalance());
   document.querySelector("#count").textContent = currentEntries().length;
   document.querySelector("#parent-balance").textContent = yen(currentBalance());
   document.querySelector("#payout-member-name").textContent = member?.name || "選択中";
   renderHistory();
   renderMemberList();
+  renderBreakdown();
   if (cloudReady && (!member || !state.members.length)) showMemberSetup();
 }
 
@@ -435,6 +475,10 @@ document.querySelector("#history-toggle").addEventListener("click", () => {
 
 document.querySelector("#open-cleanup").addEventListener("click", () => {
   document.querySelector("#cleanup-dialog").showModal();
+});
+document.querySelector("#open-breakdown").addEventListener("click", () => {
+  renderBreakdown();
+  document.querySelector("#breakdown-dialog").showModal();
 });
 document.querySelectorAll("[data-close]").forEach(button => {
   button.addEventListener("click", () => document.querySelector(`#${button.dataset.close}`).close());

@@ -114,6 +114,19 @@
     }
     .balance small { margin-left: 4px; font-size: 20px; letter-spacing: 0; }
     .balance-meta { position: relative; z-index: 1; margin: 0; font-size: 12px; opacity: .9; }
+    .breakdown-button {
+      position: relative;
+      z-index: 1;
+      margin-top: 15px;
+      padding: 9px 13px;
+      border: 1px solid rgba(255,255,255,.55);
+      border-radius: 999px;
+      background: rgba(255,255,255,.18);
+      color: white;
+      font-size: 12px;
+      font-weight: 900;
+      cursor: pointer;
+    }
     .section-head {
       display: flex;
       justify-content: space-between;
@@ -491,6 +504,36 @@
       color: #287451;
     }
     .setup-note { color: var(--muted); font-size: 13px; line-height: 1.7; }
+    .breakdown-list { display: grid; gap: 14px; max-height: 62vh; overflow: auto; }
+    .breakdown-member {
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 19px;
+      background: white;
+    }
+    .breakdown-member-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 13px 15px;
+      background: #fff6ee;
+      font-size: 14px;
+      font-weight: 900;
+    }
+    .breakdown-total { color: var(--orange-dark); font-size: 18px; }
+    .breakdown-rows { padding: 4px 14px; }
+    .breakdown-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      padding: 10px 0;
+      border-bottom: 1px solid #f0e7e0;
+    }
+    .breakdown-row:last-child { border-bottom: 0; }
+    .breakdown-chore { font-size: 13px; font-weight: 800; }
+    .breakdown-date { display: block; margin-top: 2px; color: var(--muted); font-size: 10px; }
+    .breakdown-price { align-self: center; color: var(--green); font-size: 14px; font-weight: 900; }
+    .breakdown-empty { padding: 15px; color: var(--muted); font-size: 12px; text-align: center; }
     .confirm-copy {
       margin: 4px 0 20px;
       color: var(--muted);
@@ -550,9 +593,10 @@
     </header>
 
     <section class="balance-card" aria-live="polite">
-      <p class="balance-label">いま たまっているお金</p>
+      <p class="balance-label" id="balance-label">いま たまっているお金</p>
       <p class="balance"><span id="balance">0</span><small>円</small></p>
       <p class="balance-meta"><span id="count">0</span>回のおてつだい、ありがとう！</p>
+      <button class="breakdown-button" id="open-breakdown" type="button">家族みんなの内訳を見る ›</button>
     </section>
 
     <div class="section-head">
@@ -657,6 +701,17 @@
         <button class="primary" id="confirm-ok" type="button">OK</button>
         <button class="secondary" id="confirm-not-yet" type="button">まだ</button>
       </div>
+    </div>
+  </dialog>
+
+  <dialog id="breakdown-dialog">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>たまっているお金の内訳</h2>
+        <button class="close" type="button" data-close="breakdown-dialog" aria-label="閉じる">×</button>
+      </div>
+      <p class="setup-note">まだ支払われていないお手伝いを、子どもごとに表示しています。</p>
+      <div class="breakdown-list" id="breakdown-list"></div>
     </div>
   </dialog>
 
