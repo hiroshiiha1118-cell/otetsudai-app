@@ -191,6 +191,13 @@
       border-radius: 17px;
       background: rgba(255,255,255,.72);
     }
+    .history-item[data-entry-id] {
+      cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: pan-y;
+    }
+    .history-item[data-entry-id]:active { background: #fff7f1; }
     .history-dot {
       width: 9px;
       height: 9px;
@@ -293,7 +300,7 @@
       font-size: 22px;
     }
     .confirm-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .confirm-actions .secondary { margin: 0; }
+    .confirm-actions .secondary, .confirm-actions .danger { margin: 0; }
     .toast {
       position: fixed;
       z-index: 10;
@@ -408,8 +415,25 @@
         <strong id="confirm-chore"></strong>
       </p>
       <div class="confirm-actions">
-        <button class="secondary" id="confirm-not-yet" type="button">まだ</button>
         <button class="primary" id="confirm-ok" type="button">OK</button>
+        <button class="secondary" id="confirm-not-yet" type="button">まだ</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="delete-dialog">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>この記録を削除する？</h2>
+        <button class="close" type="button" data-close="delete-dialog" aria-label="閉じる">×</button>
+      </div>
+      <p class="confirm-copy">
+        削除すると、たまっているお金からも差し引かれます。
+        <strong id="delete-chore"></strong>
+      </p>
+      <div class="confirm-actions">
+        <button class="danger" id="delete-entry" type="button">消す</button>
+        <button class="secondary" id="keep-entry" type="button">消さない</button>
       </div>
     </div>
   </dialog>
@@ -450,6 +474,9 @@
     let lastAddedId = null;
     let toastTimer = null;
     let pendingChore = null;
+    let pendingDeleteId = null;
+    let longPressTimer = null;
+    let longPressStart = null;
 
     const yen = value => new Intl.NumberFormat("ja-JP").format(value);
     const currentEntries = () => {
@@ -494,9 +521,9 @@
           <span class="history-main"><span class="history-name">おこづかいを受け取りました</span><span class="history-date">${formatDate(entry.date, true)}</span></span>
           <span class="history-value">-${yen(entry.amount)}円</span>
         </div>` : `
-        <div class="history-item">
+        <div class="history-item" data-entry-id="${entry.id}">
           <span class="history-dot"></span>
-          <span class="history-main"><span class="history-name">${entry.name}</span><span class="history-date">${formatDate(entry.date, true)}</span></span>
+          <span class="history-main"><span class="history-name">${entry.name}</span><span class="history-date">${formatDate(entry.date, true)}・長押しで削除</span></span>
           <span class="history-value">+${yen(entry.price)}円</span>
         </div>`).join("");
     }
@@ -545,6 +572,55 @@
     document.querySelector("#confirm-not-yet").addEventListener("click", () => {
       pendingChore = null;
       confirmDialog.close();
+    });
+
+    const history = document.querySelector("#history");
+    const clearLongPress = () => {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+      longPressStart = null;
+    };
+    history.addEventListener("pointerdown", event => {
+      const item = event.target.closest("[data-entry-id]");
+      if (!item) return;
+      clearLongPress();
+      longPressStart = { x: event.clientX, y: event.clientY };
+      longPressTimer = setTimeout(() => {
+        const entry = state.entries.find(candidate => candidate.id === item.dataset.entryId);
+        if (!entry || entry.type !== "chore") return;
+        longPressTimer = null;
+        pendingDeleteId = entry.id;
+        document.querySelector("#delete-chore").textContent = `${entry.name}　＋${entry.price}円`;
+        document.querySelector("#delete-dialog").showModal();
+        navigator.vibrate?.(35);
+      }, 650);
+    });
+    history.addEventListener("pointerup", clearLongPress);
+    history.addEventListener("pointercancel", clearLongPress);
+    history.addEventListener("pointermove", event => {
+      if (!longPressStart) return;
+      const moved = Math.hypot(
+        event.clientX - longPressStart.x,
+        event.clientY - longPressStart.y
+      );
+      if (moved > 12) clearLongPress();
+    });
+    history.addEventListener("contextmenu", event => {
+      if (event.target.closest("[data-entry-id]")) event.preventDefault();
+    });
+
+    document.querySelector("#delete-entry").addEventListener("click", () => {
+      const index = state.entries.findIndex(entry => entry.id === pendingDeleteId);
+      if (index >= 0) state.entries.splice(index, 1);
+      pendingDeleteId = null;
+      save();
+      render();
+      document.querySelector("#delete-dialog").close();
+      showToast("記録を削除しました", false);
+    });
+    document.querySelector("#keep-entry").addEventListener("click", () => {
+      pendingDeleteId = null;
+      document.querySelector("#delete-dialog").close();
     });
 
     document.querySelector("#history-toggle").addEventListener("click", () => {
