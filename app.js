@@ -35,6 +35,8 @@ const familyUrl = `${DATABASE_URL}/families/${familyId}`;
 const memberStorageKey = `${MEMBER_STORAGE_PREFIX}${familyId}`;
 const state = { entries: [], members: [], pin: "1234" };
 let activeMemberId = localStorage.getItem(memberStorageKey);
+let parentAuthorized = sessionStorage.getItem(`otetsudai-parent-auth-${familyId}`) === "1";
+let pendingParentMemberId = null;
 let cloudReady = false;
 let lastAddedId = null;
 let toastTimer = null;
@@ -103,6 +105,7 @@ function unpaidEntriesForMember(memberId) {
 }
 
 function currentEntries() {
+  if (activeMember()?.role === "parent") return [];
   return unpaidEntriesForMember(activeMemberId);
 }
 
@@ -128,6 +131,7 @@ function renderMemberList() {
     <button class="member-option" type="button" data-member-id="${member.id}">
       <span class="member-avatar">👤</span>
       <span>${member.name}</span>
+      <span class="role-tag ${member.role === "parent" ? "parent" : ""}">${member.role === "parent" ? "親" : "子ども"}</span>
       <span style="margin-left:auto;color:#e75638">この人で使う ›</span>
     </button>
   `).join("");
@@ -140,7 +144,13 @@ function showMemberSetup() {
 }
 
 function chooseMember(memberId) {
-  if (!state.members.some(member => member.id === memberId)) return;
+  const member = state.members.find(candidate => candidate.id === memberId);
+  if (!member) return;
+  if (member.role === "parent" && !parentAuthorized) {
+    pendingParentMemberId = member.id;
+    openParentAccess();
+    return;
+  }
   activeMemberId = memberId;
   localStorage.setItem(memberStorageKey, memberId);
   document.querySelector("#setup-dialog").close();
@@ -171,13 +181,18 @@ async function migrateLegacyEntries(member) {
   localStorage.setItem(migratedKey, "1");
 }
 
-async function addMember(name, selectAfter = false) {
+async function addMember(name, selectAfter = false, role = "child") {
   const cleanName = name.trim();
   if (!cleanName) throw new Error("名前を入力してください");
   if (state.members.some(member => member.name === cleanName)) {
     throw new Error("同じ名前がすでに登録されています");
   }
-  const member = { id: crypto.randomUUID(), name: cleanName, createdAt: new Date().toISOString() };
+  const member = {
+    id: crypto.randomUUID(),
+    name: cleanName,
+    role,
+    createdAt: new Date().toISOString(),
+  };
   await cloudSet(`members/${member.id}`, member);
   if (selectAfter || !activeMemberId) {
     activeMemberId = member.id;
@@ -266,13 +281,16 @@ function renderCalendar() {
   document.querySelector("#calendar-grid").innerHTML = days.join("");
 }
 
-function renderBreakdown() {
+function renderBreakdown(onlyMemberId = null) {
   const container = document.querySelector("#breakdown-list");
-  if (!state.members.length) {
+  const children = state.members.filter(member =>
+    member.role !== "parent" && (!onlyMemberId || member.id === onlyMemberId)
+  );
+  if (!children.length) {
     container.innerHTML = '<div class="empty">名前がまだ登録されていません</div>';
     return;
   }
-  container.innerHTML = state.members.map(member => {
+  container.innerHTML = children.map(member => {
     const entries = unpaidEntriesForMember(member.id);
     const total = entries.reduce((sum, entry) => sum + entry.price, 0);
     const rows = entries.length
@@ -298,9 +316,56 @@ function renderBreakdown() {
   }).join("");
 }
 
+function renderParentDashboard() {
+  const container = document.querySelector("#parent-summary");
+  const children = state.members.filter(member => member.role !== "parent");
+  if (!children.length) {
+    container.innerHTML = '<div class="empty">子どもの名前がまだ登録されていません</div>';
+    return;
+  }
+  container.innerHTML = children.map(member => {
+    const entries = unpaidEntriesForMember(member.id);
+    const total = entries.reduce((sum, entry) => sum + entry.price, 0);
+    return `
+      <section class="parent-child-card">
+        <div class="parent-child-head">
+          <span>👤 ${member.name}</span>
+          <span class="parent-child-balance">${yen(total)}円</span>
+        </div>
+        <p class="parent-child-meta">未払いのお手伝い ${entries.length}件</p>
+        <div class="parent-card-actions">
+          <button class="manage-detail" type="button" data-parent-detail="${member.id}">内訳を見る</button>
+          <button class="manage-payout" type="button" data-parent-payout="${member.id}" ${total ? "" : "disabled"}>支払い済みにする</button>
+        </div>
+      </section>
+    `;
+  }).join("");
+}
+
+function renderParentMemberList() {
+  const container = document.querySelector("#parent-member-list");
+  if (!state.members.length) {
+    container.innerHTML = '<div class="empty">登録された名前はありません</div>';
+    return;
+  }
+  container.innerHTML = state.members.map(member => `
+    <div class="parent-member-row">
+      <span>👤 ${member.name}</span>
+      <span class="role-tag ${member.role === "parent" ? "parent" : ""}">${member.role === "parent" ? "親" : "子ども"}</span>
+      <button class="delete-name" type="button" data-delete-member="${member.id}">名前を削除</button>
+    </div>
+  `).join("");
+}
+
 function render() {
   const member = activeMember();
+  const isParentMode = member?.role === "parent" && parentAuthorized;
   document.querySelector("#switch-user").textContent = member ? `👤 ${member.name}` : "👤 名前を選ぶ";
+  document.querySelector("#open-parent").textContent = isParentMode ? "⚙ 管理設定" : "🔒 おうちの人";
+  document.querySelector("#parent-dashboard").classList.toggle("active", isParentMode);
+  document.querySelector("#child-balance-card").style.display = isParentMode ? "none" : "";
+  document.querySelector("#chore-heading").style.display = isParentMode ? "none" : "";
+  document.querySelector("#chore-list").style.display = isParentMode ? "none" : "";
   document.querySelector("#balance-label").textContent = member
     ? `${member.name}の いま たまっているお金`
     : "いま たまっているお金";
@@ -311,6 +376,8 @@ function render() {
   renderHistory();
   renderMemberList();
   renderBreakdown();
+  renderParentDashboard();
+  renderParentMemberList();
   if (cloudReady && (!member || !state.members.length)) showMemberSetup();
 }
 
@@ -516,7 +583,7 @@ document.querySelector("#add-member").addEventListener("click", async () => {
 });
 
 const parentDialog = document.querySelector("#parent-dialog");
-document.querySelector("#open-parent").addEventListener("click", () => {
+function openParentAccess() {
   document.querySelector("#pin-panel").style.display = "";
   document.querySelector("#parent-panel").classList.remove("active");
   document.querySelector("#pin").value = "";
@@ -524,6 +591,10 @@ document.querySelector("#open-parent").addEventListener("click", () => {
   document.querySelector("#setting-message").textContent = "";
   parentDialog.showModal();
   setTimeout(() => document.querySelector("#pin").focus(), 100);
+}
+document.querySelector("#open-parent").addEventListener("click", () => {
+  pendingParentMemberId = null;
+  openParentAccess();
 });
 
 function unlockParent() {
@@ -531,8 +602,22 @@ function unlockParent() {
     document.querySelector("#pin-error").textContent = "暗証番号が違います";
     return;
   }
+  if (pendingParentMemberId) {
+    parentAuthorized = true;
+    sessionStorage.setItem(`otetsudai-parent-auth-${familyId}`, "1");
+    const memberId = pendingParentMemberId;
+    pendingParentMemberId = null;
+    activeMemberId = memberId;
+    localStorage.setItem(memberStorageKey, memberId);
+    parentDialog.close();
+    if (document.querySelector("#setup-dialog").open) document.querySelector("#setup-dialog").close();
+    render();
+    return;
+  }
   document.querySelector("#pin-panel").style.display = "none";
   document.querySelector("#parent-panel").classList.add("active");
+  document.querySelector("#selected-child-payout").style.display =
+    activeMember()?.role === "parent" ? "none" : "";
   render();
 }
 document.querySelector("#unlock").addEventListener("click", unlockParent);
@@ -540,12 +625,11 @@ document.querySelector("#pin").addEventListener("keydown", event => {
   if (event.key === "Enter") unlockParent();
 });
 
-document.querySelector("#payout").addEventListener("click", async () => {
-  const member = activeMember();
-  const amount = currentBalance();
+async function payMember(memberId) {
+  const member = state.members.find(candidate => candidate.id === memberId && candidate.role !== "parent");
+  const entries = unpaidEntriesForMember(memberId);
+  const amount = entries.reduce((sum, entry) => sum + entry.price, 0);
   if (!member) {
-    parentDialog.close();
-    showMemberSetup();
     return;
   }
   if (!amount) {
@@ -563,8 +647,25 @@ document.querySelector("#payout").addEventListener("click", async () => {
   };
   await cloudSet(`entries/${entry.id}`, entry);
   await syncFromCloud();
-  parentDialog.close();
+  if (parentDialog.open) parentDialog.close();
   showToast(`${member.name}さんが${yen(amount)}円を受け取りました！`, false);
+}
+
+document.querySelector("#payout").addEventListener("click", async () => {
+  const member = activeMember();
+  if (!member || member.role === "parent") return;
+  await payMember(member.id);
+});
+
+document.querySelector("#parent-summary").addEventListener("click", async event => {
+  const detail = event.target.closest("[data-parent-detail]");
+  if (detail) {
+    renderBreakdown(detail.dataset.parentDetail);
+    document.querySelector("#breakdown-dialog").showModal();
+    return;
+  }
+  const payout = event.target.closest("[data-parent-payout]");
+  if (payout) await payMember(payout.dataset.parentPayout);
 });
 
 document.querySelector("#parent-add-member").addEventListener("click", async () => {
@@ -579,6 +680,45 @@ document.querySelector("#parent-add-member").addEventListener("click", async () 
     message.style.color = "#c7452d";
     message.textContent = reason.message;
   }
+});
+
+document.querySelector("#parent-add-profile").addEventListener("click", async () => {
+  const input = document.querySelector("#parent-profile-name");
+  const message = document.querySelector("#setting-message");
+  try {
+    await addMember(input.value, false, "parent");
+    input.value = "";
+    message.style.color = "#32845a";
+    message.textContent = "親プロフィールを追加しました";
+  } catch (reason) {
+    message.style.color = "#c7452d";
+    message.textContent = reason.message;
+  }
+});
+
+document.querySelector("#parent-member-list").addEventListener("click", async event => {
+  const button = event.target.closest("[data-delete-member]");
+  if (!button) return;
+  const member = state.members.find(candidate => candidate.id === button.dataset.deleteMember);
+  if (!member) return;
+  const hasRecords = state.entries.some(entry => entry.memberId === member.id);
+  const message = document.querySelector("#setting-message");
+  if (hasRecords) {
+    message.style.color = "#c7452d";
+    message.textContent = `${member.name}には履歴があるため削除できません。先にその人の履歴を削除してください`;
+    return;
+  }
+  if (!confirm(`${member.name}の名前登録を削除しますか？`)) return;
+  await cloudRemove(`members/${member.id}`);
+  if (activeMemberId === member.id) {
+    activeMemberId = null;
+    localStorage.removeItem(memberStorageKey);
+    parentAuthorized = false;
+    sessionStorage.removeItem(`otetsudai-parent-auth-${familyId}`);
+  }
+  await syncFromCloud();
+  message.style.color = "#32845a";
+  message.textContent = "名前を削除しました";
 });
 
 document.querySelector("#share-family").addEventListener("click", async () => {
@@ -618,13 +758,17 @@ async function syncFromCloud() {
     state.entries = Object.values(data.entries || {}).sort(
       (first, second) => new Date(first.date) - new Date(second.date),
     );
-    state.members = Object.values(data.members || {}).sort(
-      (first, second) => new Date(first.createdAt) - new Date(second.createdAt),
-    );
+    state.members = Object.values(data.members || {})
+      .map(member => ({ ...member, role: member.role === "parent" ? "parent" : "child" }))
+      .sort((first, second) => new Date(first.createdAt) - new Date(second.createdAt));
     state.pin = /^\d{4}$/.test(data.pin || "") ? data.pin : "1234";
     cloudReady = true;
     setSyncStatus("クラウド同期済み");
     if (activeMemberId && !state.members.some(member => member.id === activeMemberId)) {
+      activeMemberId = null;
+      localStorage.removeItem(memberStorageKey);
+    }
+    if (activeMember()?.role === "parent" && !parentAuthorized) {
       activeMemberId = null;
       localStorage.removeItem(memberStorageKey);
     }

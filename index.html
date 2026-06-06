@@ -504,6 +504,63 @@
       color: #287451;
     }
     .setup-note { color: var(--muted); font-size: 13px; line-height: 1.7; }
+    .role-tag {
+      padding: 3px 7px;
+      border-radius: 999px;
+      background: #f0ece9;
+      color: var(--muted);
+      font-size: 9px;
+      font-weight: 900;
+    }
+    .role-tag.parent { background: #edf4fc; color: #4179a9; }
+    .parent-dashboard { display: none; }
+    .parent-dashboard.active { display: block; }
+    .parent-dashboard-title { margin: 4px 0 12px; font-size: 21px; }
+    .parent-summary { display: grid; gap: 11px; }
+    .parent-child-card {
+      padding: 15px;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: white;
+      box-shadow: 0 5px 16px rgba(95,67,47,.07);
+    }
+    .parent-child-head { display: flex; justify-content: space-between; align-items: center; font-weight: 900; }
+    .parent-child-balance { color: var(--orange-dark); font-size: 22px; }
+    .parent-child-meta { margin: 4px 0 12px; color: var(--muted); font-size: 11px; }
+    .parent-card-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .parent-card-actions button {
+      padding: 10px 7px;
+      border: 0;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 900;
+      cursor: pointer;
+    }
+    .manage-detail { background: #eee8e3; }
+    .manage-payout { background: #ffe9e4; color: #c7452d; }
+    .parent-member-list { display: grid; gap: 8px; margin: 10px 0 15px; }
+    .parent-member-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: white;
+      font-size: 13px;
+      font-weight: 800;
+    }
+    .delete-name {
+      margin-left: auto;
+      padding: 7px 9px;
+      border: 0;
+      border-radius: 10px;
+      background: #ffe9e4;
+      color: #c7452d;
+      font-size: 10px;
+      font-weight: 900;
+      cursor: pointer;
+    }
     .breakdown-list { display: grid; gap: 14px; max-height: 62vh; overflow: auto; }
     .breakdown-member {
       overflow: hidden;
@@ -592,18 +649,23 @@
       </div>
     </header>
 
-    <section class="balance-card" aria-live="polite">
+    <section class="parent-dashboard" id="parent-dashboard">
+      <h2 class="parent-dashboard-title">家族のおこづかい管理</h2>
+      <div class="parent-summary" id="parent-summary"></div>
+    </section>
+
+    <section class="balance-card" id="child-balance-card" aria-live="polite">
       <p class="balance-label" id="balance-label">いま たまっているお金</p>
       <p class="balance"><span id="balance">0</span><small>円</small></p>
       <p class="balance-meta"><span id="count">0</span>回のおてつだい、ありがとう！</p>
       <button class="breakdown-button" id="open-breakdown" type="button">家族みんなの内訳を見る ›</button>
     </section>
 
-    <div class="section-head">
+    <div class="section-head" id="chore-heading">
       <h2>なにをした？</h2>
       <p class="section-note">タップでお金がたまるよ</p>
     </div>
-    <section class="chores" aria-label="お手伝い一覧">
+    <section class="chores" id="chore-list" aria-label="お手伝い一覧">
       <button class="chore" type="button" data-chore="炊飯" data-price="20">
         <span class="chore-icon" aria-hidden="true">🍚</span>
         <span class="chore-name">炊飯</span>
@@ -742,12 +804,21 @@
         <button class="primary" id="unlock" type="button">ひらく</button>
       </div>
       <div class="parent-panel" id="parent-panel">
-        <div class="parent-stat"><span id="payout-member-name">選択中</span>のお支払い金額<strong><span id="parent-balance">0</span>円</strong></div>
-        <button class="danger" id="payout" type="button">支払い済みにして 0円にする</button>
+        <div id="selected-child-payout">
+          <div class="parent-stat"><span id="payout-member-name">選択中</span>のお支払い金額<strong><span id="parent-balance">0</span>円</strong></div>
+          <button class="danger" id="payout" type="button">支払い済みにして 0円にする</button>
+        </div>
+        <div class="parent-divider"></div>
+        <p class="setting-title">登録済みの名前</p>
+        <div class="parent-member-list" id="parent-member-list"></div>
         <div class="parent-divider"></div>
         <p class="setting-title">子どもの名前を追加</p>
         <input class="name-input" id="parent-member-name" type="text" maxlength="12" placeholder="新しい名前" autocomplete="off">
         <button class="secondary" id="parent-add-member" type="button">名前を追加する</button>
+        <div class="parent-divider"></div>
+        <p class="setting-title">親プロフィールを追加</p>
+        <input class="name-input" id="parent-profile-name" type="text" maxlength="12" placeholder="例：お父さん、お母さん" autocomplete="off">
+        <button class="secondary" id="parent-add-profile" type="button">親を追加する</button>
         <div class="parent-divider"></div>
         <p class="setting-title">家族のスマホと共有</p>
         <button class="secondary" id="share-family" type="button">家族用リンクを共有する</button>
