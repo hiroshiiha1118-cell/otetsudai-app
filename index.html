@@ -975,7 +975,7 @@
 
     render();
     if ("serviceWorker" in navigator && location.protocol !== "file:") {
-      navigator.serviceWorker.register("sw.js");
+      navigator.serviceWorker.register("sw.js").then(registration => registration.update());
     }
   </script>
 </body>
