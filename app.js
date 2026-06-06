@@ -361,7 +361,7 @@ function render() {
   const member = activeMember();
   const isParentMode = member?.role === "parent" && parentAuthorized;
   document.querySelector("#switch-user").textContent = member ? `👤 ${member.name}` : "👤 名前を選ぶ";
-  document.querySelector("#open-parent").textContent = isParentMode ? "⚙ 管理設定" : "🔒 おうちの人";
+  document.querySelector("#open-parent").hidden = !isParentMode;
   document.querySelector("#parent-dashboard").classList.toggle("active", isParentMode);
   document.querySelector("#child-balance-card").style.display = isParentMode ? "none" : "";
   document.querySelector("#chore-heading").style.display = isParentMode ? "none" : "";
@@ -594,6 +594,11 @@ function openParentAccess() {
 }
 document.querySelector("#open-parent").addEventListener("click", () => {
   pendingParentMemberId = null;
+  openParentAccess();
+});
+document.querySelector("#setup-parent-access").addEventListener("click", () => {
+  pendingParentMemberId = null;
+  document.querySelector("#setup-dialog").close();
   openParentAccess();
 });
 

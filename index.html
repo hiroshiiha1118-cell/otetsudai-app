@@ -644,7 +644,7 @@
       </div>
       <div class="header-actions">
         <button class="user-button" id="switch-user" type="button">👤 名前を選ぶ</button>
-        <button class="parent-button" id="open-parent" type="button">🔒 おうちの人</button>
+        <button class="parent-button" id="open-parent" type="button" hidden>⚙ 管理設定</button>
         <span class="sync-status" id="sync-status">クラウド接続中…</span>
       </div>
     </header>
@@ -787,6 +787,7 @@
       <p class="setting-title">新しい名前を追加</p>
       <input class="name-input" id="member-name" type="text" maxlength="12" placeholder="例：ひろし" autocomplete="off">
       <button class="secondary" id="add-member" type="button">名前を追加する</button>
+      <button class="secondary" id="setup-parent-access" type="button">🔒 親プロフィールの登録・管理</button>
       <p class="error" id="member-error"></p>
     </div>
   </dialog>
