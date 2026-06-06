@@ -273,6 +273,45 @@
       touch-action: pan-y;
     }
     .history-item[data-entry-id]:active { background: #fff7f1; }
+    .history-item.selected {
+      border-color: var(--orange);
+      background: #fff1ed;
+      box-shadow: inset 0 0 0 1px var(--orange);
+    }
+    .history-check {
+      display: none;
+      place-items: center;
+      flex: 0 0 auto;
+      width: 25px;
+      height: 25px;
+      border: 2px solid #cfc2b8;
+      border-radius: 8px;
+      background: white;
+      color: white;
+      font-size: 15px;
+      font-weight: 900;
+    }
+    .selection-mode .history-check { display: grid; }
+    .history-item.selected .history-check {
+      border-color: var(--orange);
+      background: var(--orange);
+    }
+    .selection-toolbar {
+      display: none;
+      margin-bottom: 10px;
+      padding: 13px;
+      border: 1px solid #ffd2c7;
+      border-radius: 18px;
+      background: #fff8f5;
+    }
+    .selection-toolbar.active { display: block; }
+    .selection-count {
+      display: block;
+      margin-bottom: 10px;
+      font-size: 13px;
+      font-weight: 900;
+      text-align: center;
+    }
     .history-dot {
       width: 9px;
       height: 9px;
@@ -459,6 +498,13 @@
       <span id="history-label">今日の記録</span> <span id="history-arrow">▼</span>
     </button>
     <div class="history-wrap" id="history-wrap">
+      <div class="selection-toolbar" id="selection-toolbar">
+        <span class="selection-count" id="selection-count">0件を選択中</span>
+        <div class="confirm-actions">
+          <button class="danger" id="delete-selected" type="button">消す</button>
+          <button class="secondary" id="cancel-selection" type="button">消さない</button>
+        </div>
+      </div>
       <section class="history-list" id="history" aria-label="今日の記録"></section>
     </div>
   </main>
@@ -515,23 +561,6 @@
     </div>
   </dialog>
 
-  <dialog id="delete-dialog">
-    <div class="modal">
-      <div class="modal-head">
-        <h2>この記録を削除する？</h2>
-        <button class="close" type="button" data-close="delete-dialog" aria-label="閉じる">×</button>
-      </div>
-      <p class="confirm-copy">
-        削除すると、たまっているお金からも差し引かれます。
-        <strong id="delete-chore"></strong>
-      </p>
-      <div class="confirm-actions">
-        <button class="danger" id="delete-entry" type="button">消す</button>
-        <button class="secondary" id="keep-entry" type="button">消さない</button>
-      </div>
-    </div>
-  </dialog>
-
   <dialog id="parent-dialog">
     <div class="modal">
       <div class="modal-head">
@@ -568,7 +597,9 @@
     let lastAddedId = null;
     let toastTimer = null;
     let pendingChore = null;
-    let pendingDeleteId = null;
+    let selectedEntryIds = new Set();
+    let selectionMode = false;
+    let suppressHistoryClick = false;
     let longPressTimer = null;
     let longPressStart = null;
     let selectedHistoryDate = new Date();
@@ -606,6 +637,9 @@
 
     function renderHistory() {
       const history = document.querySelector("#history");
+      history.classList.toggle("selection-mode", selectionMode);
+      document.querySelector("#selection-toolbar").classList.toggle("active", selectionMode);
+      document.querySelector("#selection-count").textContent = `${selectedEntryIds.size}件を選択中`;
       const selectedEntries = [...state.entries].filter(entry =>
         sameDay(new Date(entry.date), selectedHistoryDate)
       ).reverse();
@@ -624,9 +658,10 @@
           <span class="history-main"><span class="history-name">おこづかいを受け取りました</span><span class="history-date">${formatDate(entry.date, true)}</span></span>
           <span class="history-value">-${yen(entry.amount)}円</span>
         </div>` : `
-        <div class="history-item" data-entry-id="${entry.id}">
+        <div class="history-item ${selectedEntryIds.has(entry.id) ? "selected" : ""}" data-entry-id="${entry.id}">
+          <span class="history-check">${selectedEntryIds.has(entry.id) ? "✓" : ""}</span>
           <span class="history-dot"></span>
-          <span class="history-main"><span class="history-name">${entry.name}</span><span class="history-date">${formatDate(entry.date, true)}・長押しで削除</span></span>
+          <span class="history-main"><span class="history-name">${entry.name}</span><span class="history-date">${formatDate(entry.date, true)}・${selectionMode ? "タップで選択" : "長押しで削除選択"}</span></span>
           <span class="history-value">+${yen(entry.price)}円</span>
         </div>`).join("");
     }
@@ -711,6 +746,12 @@
     });
 
     const history = document.querySelector("#history");
+    function cancelSelection() {
+      selectionMode = false;
+      selectedEntryIds.clear();
+      renderHistory();
+    }
+
     const clearLongPress = () => {
       clearTimeout(longPressTimer);
       longPressTimer = null;
@@ -725,10 +766,12 @@
         const entry = state.entries.find(candidate => candidate.id === item.dataset.entryId);
         if (!entry || entry.type !== "chore") return;
         longPressTimer = null;
-        pendingDeleteId = entry.id;
-        document.querySelector("#delete-chore").textContent = `${entry.name}　＋${entry.price}円`;
-        document.querySelector("#delete-dialog").showModal();
+        selectionMode = true;
+        selectedEntryIds.add(entry.id);
+        suppressHistoryClick = true;
+        renderHistory();
         navigator.vibrate?.(35);
+        setTimeout(() => { suppressHistoryClick = false; }, 400);
       }, 650);
     });
     history.addEventListener("pointerup", clearLongPress);
@@ -744,20 +787,29 @@
     history.addEventListener("contextmenu", event => {
       if (event.target.closest("[data-entry-id]")) event.preventDefault();
     });
+    history.addEventListener("click", event => {
+      if (!selectionMode || suppressHistoryClick) return;
+      const item = event.target.closest("[data-entry-id]");
+      if (!item) return;
+      if (selectedEntryIds.has(item.dataset.entryId)) {
+        selectedEntryIds.delete(item.dataset.entryId);
+      } else {
+        selectedEntryIds.add(item.dataset.entryId);
+      }
+      renderHistory();
+    });
 
-    document.querySelector("#delete-entry").addEventListener("click", () => {
-      const index = state.entries.findIndex(entry => entry.id === pendingDeleteId);
-      if (index >= 0) state.entries.splice(index, 1);
-      pendingDeleteId = null;
+    document.querySelector("#delete-selected").addEventListener("click", () => {
+      if (!selectedEntryIds.size) return;
+      const deletedCount = selectedEntryIds.size;
+      state.entries = state.entries.filter(entry => !selectedEntryIds.has(entry.id));
+      selectionMode = false;
+      selectedEntryIds.clear();
       save();
       render();
-      document.querySelector("#delete-dialog").close();
-      showToast("記録を削除しました", false);
+      showToast(`${deletedCount}件の記録を削除しました`, false);
     });
-    document.querySelector("#keep-entry").addEventListener("click", () => {
-      pendingDeleteId = null;
-      document.querySelector("#delete-dialog").close();
-    });
+    document.querySelector("#cancel-selection").addEventListener("click", cancelSelection);
 
     const calendarDialog = document.querySelector("#calendar-dialog");
     document.querySelector("#open-calendar").addEventListener("click", () => {
@@ -781,6 +833,8 @@
       const day = event.target.closest("[data-calendar-date]");
       if (!day) return;
       const [year, month, date] = day.dataset.calendarDate.split("-").map(Number);
+      selectionMode = false;
+      selectedEntryIds.clear();
       selectedHistoryDate = new Date(year, month, date);
       renderHistory();
       calendarDialog.close();
