@@ -109,6 +109,9 @@
       margin: 25px 2px 12px;
     }
     .history-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
       width: 100%;
       padding: 15px 17px;
       border: 1px solid var(--line);
@@ -120,9 +123,81 @@
       text-align: left;
       cursor: pointer;
     }
-    .history-toggle span { float: right; color: var(--orange-dark); }
+    #history-arrow { color: var(--orange-dark); }
     .history-wrap { display: none; margin-top: 10px; }
     .history-wrap.open { display: block; }
+    .calendar-button {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      margin-bottom: 10px;
+      padding: 14px 17px;
+      border: 0;
+      border-radius: 18px;
+      background: #fff0db;
+      color: #9b5728;
+      font-size: 16px;
+      font-weight: 900;
+      cursor: pointer;
+    }
+    .calendar-head {
+      display: grid;
+      grid-template-columns: 42px 1fr 42px;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    .calendar-title { text-align: center; font-size: 19px; font-weight: 900; }
+    .month-button {
+      width: 42px;
+      height: 42px;
+      border: 0;
+      border-radius: 14px;
+      background: #f3ebe4;
+      font-size: 21px;
+      font-weight: 900;
+      cursor: pointer;
+    }
+    .calendar-weekdays, .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 5px;
+    }
+    .calendar-weekdays span {
+      padding-bottom: 5px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      text-align: center;
+    }
+    .calendar-weekdays span:first-child { color: #dc5b4b; }
+    .calendar-weekdays span:last-child { color: #4d83bd; }
+    .calendar-day {
+      position: relative;
+      aspect-ratio: 1;
+      border: 0;
+      border-radius: 14px;
+      background: transparent;
+      font-size: 14px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .calendar-day.other-month { color: #bdb3ac; }
+    .calendar-day.today { box-shadow: inset 0 0 0 2px var(--yellow); }
+    .calendar-day.selected { background: var(--orange); color: white; }
+    .calendar-day.has-record::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: 5px;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--green);
+      transform: translateX(-50%);
+    }
+    .calendar-day.selected::after { background: white; }
     h2 { margin: 0; font-size: 18px; }
     .section-note { margin: 0; color: var(--muted); font-size: 11px; }
     .chores { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -379,8 +454,9 @@
     </section>
 
     <div class="section-head"></div>
+    <button class="calendar-button" id="open-calendar" type="button">📅 カレンダー</button>
     <button class="history-toggle" id="history-toggle" type="button" aria-expanded="false">
-      今日の記録 <span id="history-arrow">▼</span>
+      <span id="history-label">今日の記録</span> <span id="history-arrow">▼</span>
     </button>
     <div class="history-wrap" id="history-wrap">
       <section class="history-list" id="history" aria-label="今日の記録"></section>
@@ -401,6 +477,24 @@
         <button class="cleanup-option" type="button" data-chore="掃除機（1階）" data-price="20"><span>🧹 掃除機（1階）</span><span>+20円</span></button>
         <button class="cleanup-option" type="button" data-chore="掃除機（2階）" data-price="20"><span>🧹 掃除機（2階）</span><span>+20円</span></button>
       </div>
+    </div>
+  </dialog>
+
+  <dialog id="calendar-dialog">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>記録を見る日を選ぶ</h2>
+        <button class="close" type="button" data-close="calendar-dialog" aria-label="閉じる">×</button>
+      </div>
+      <div class="calendar-head">
+        <button class="month-button" id="previous-month" type="button" aria-label="前の月">‹</button>
+        <div class="calendar-title" id="calendar-title"></div>
+        <button class="month-button" id="next-month" type="button" aria-label="次の月">›</button>
+      </div>
+      <div class="calendar-weekdays" aria-hidden="true">
+        <span>日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span>
+      </div>
+      <div class="calendar-grid" id="calendar-grid"></div>
     </div>
   </dialog>
 
@@ -477,6 +571,8 @@
     let pendingDeleteId = null;
     let longPressTimer = null;
     let longPressStart = null;
+    let selectedHistoryDate = new Date();
+    let calendarViewDate = new Date();
 
     const yen = value => new Intl.NumberFormat("ja-JP").format(value);
     const currentEntries = () => {
@@ -498,24 +594,31 @@
       }).format(date);
     }
 
-    function render() {
-      const entries = currentEntries();
-      document.querySelector("#balance").textContent = yen(currentBalance());
-      document.querySelector("#count").textContent = entries.length;
-      document.querySelector("#parent-balance").textContent = yen(currentBalance());
+    function sameDay(first, second) {
+      return first.getFullYear() === second.getFullYear() &&
+        first.getMonth() === second.getMonth() &&
+        first.getDate() === second.getDate();
+    }
+
+    function dateKey(date) {
+      return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+    }
+
+    function renderHistory() {
       const history = document.querySelector("#history");
+      const selectedEntries = [...state.entries].filter(entry =>
+        sameDay(new Date(entry.date), selectedHistoryDate)
+      ).reverse();
       const today = new Date();
-      const todayEntries = [...state.entries].filter(entry => {
-        const date = new Date(entry.date);
-        return date.getFullYear() === today.getFullYear() &&
-          date.getMonth() === today.getMonth() &&
-          date.getDate() === today.getDate();
-      }).reverse();
-      if (!todayEntries.length) {
-        history.innerHTML = '<div class="empty">今日のお手伝いは、まだありません</div>';
+      document.querySelector("#history-label").textContent = sameDay(selectedHistoryDate, today)
+        ? "今日の記録"
+        : `${selectedHistoryDate.getMonth() + 1}月${selectedHistoryDate.getDate()}日の記録`;
+      history.setAttribute("aria-label", document.querySelector("#history-label").textContent);
+      if (!selectedEntries.length) {
+        history.innerHTML = '<div class="empty">この日のお手伝い記録はありません</div>';
         return;
       }
-      history.innerHTML = todayEntries.map(entry => entry.type === "payout" ? `
+      history.innerHTML = selectedEntries.map(entry => entry.type === "payout" ? `
         <div class="history-item payout">
           <span class="history-dot"></span>
           <span class="history-main"><span class="history-name">おこづかいを受け取りました</span><span class="history-date">${formatDate(entry.date, true)}</span></span>
@@ -526,6 +629,38 @@
           <span class="history-main"><span class="history-name">${entry.name}</span><span class="history-date">${formatDate(entry.date, true)}・長押しで削除</span></span>
           <span class="history-value">+${yen(entry.price)}円</span>
         </div>`).join("");
+    }
+
+    function renderCalendar() {
+      const year = calendarViewDate.getFullYear();
+      const month = calendarViewDate.getMonth();
+      document.querySelector("#calendar-title").textContent = `${year}年 ${month + 1}月`;
+      const firstDay = new Date(year, month, 1);
+      const gridStart = new Date(year, month, 1 - firstDay.getDay());
+      const recordDates = new Set(state.entries.map(entry => dateKey(new Date(entry.date))));
+      const today = new Date();
+      const days = [];
+      for (let index = 0; index < 42; index++) {
+        const date = new Date(gridStart);
+        date.setDate(gridStart.getDate() + index);
+        const classes = [
+          "calendar-day",
+          date.getMonth() !== month ? "other-month" : "",
+          sameDay(date, today) ? "today" : "",
+          sameDay(date, selectedHistoryDate) ? "selected" : "",
+          recordDates.has(dateKey(date)) ? "has-record" : ""
+        ].filter(Boolean).join(" ");
+        days.push(`<button class="${classes}" type="button" data-calendar-date="${date.getFullYear()}-${date.getMonth()}-${date.getDate()}">${date.getDate()}</button>`);
+      }
+      document.querySelector("#calendar-grid").innerHTML = days.join("");
+    }
+
+    function render() {
+      const entries = currentEntries();
+      document.querySelector("#balance").textContent = yen(currentBalance());
+      document.querySelector("#count").textContent = entries.length;
+      document.querySelector("#parent-balance").textContent = yen(currentBalance());
+      renderHistory();
     }
 
     function showToast(message, canUndo = true) {
@@ -540,6 +675,7 @@
       const entry = { id: crypto.randomUUID(), type: "chore", name, price, date: new Date().toISOString() };
       state.entries.push(entry);
       lastAddedId = entry.id;
+      selectedHistoryDate = new Date();
       save();
       render();
       showToast(`${name} ＋${price}円！`);
@@ -621,6 +757,37 @@
     document.querySelector("#keep-entry").addEventListener("click", () => {
       pendingDeleteId = null;
       document.querySelector("#delete-dialog").close();
+    });
+
+    const calendarDialog = document.querySelector("#calendar-dialog");
+    document.querySelector("#open-calendar").addEventListener("click", () => {
+      calendarViewDate = new Date(
+        selectedHistoryDate.getFullYear(),
+        selectedHistoryDate.getMonth(),
+        1
+      );
+      renderCalendar();
+      calendarDialog.showModal();
+    });
+    document.querySelector("#previous-month").addEventListener("click", () => {
+      calendarViewDate.setMonth(calendarViewDate.getMonth() - 1);
+      renderCalendar();
+    });
+    document.querySelector("#next-month").addEventListener("click", () => {
+      calendarViewDate.setMonth(calendarViewDate.getMonth() + 1);
+      renderCalendar();
+    });
+    document.querySelector("#calendar-grid").addEventListener("click", event => {
+      const day = event.target.closest("[data-calendar-date]");
+      if (!day) return;
+      const [year, month, date] = day.dataset.calendarDate.split("-").map(Number);
+      selectedHistoryDate = new Date(year, month, date);
+      renderHistory();
+      calendarDialog.close();
+      const wrap = document.querySelector("#history-wrap");
+      wrap.classList.add("open");
+      document.querySelector("#history-toggle").setAttribute("aria-expanded", "true");
+      document.querySelector("#history-arrow").textContent = "▲";
     });
 
     document.querySelector("#history-toggle").addEventListener("click", () => {
