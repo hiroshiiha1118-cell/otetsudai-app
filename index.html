@@ -173,6 +173,27 @@
     }
     .calendar-weekdays span:first-child { color: #dc5b4b; }
     .calendar-weekdays span:last-child { color: #4d83bd; }
+    .calendar-legend {
+      display: flex;
+      justify-content: center;
+      gap: 15px;
+      margin: -4px 0 13px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .calendar-legend span { display: flex; align-items: center; gap: 5px; }
+    .legend-mark {
+      display: grid;
+      place-items: center;
+      width: 20px;
+      height: 20px;
+      border-radius: 7px;
+      font-size: 12px;
+      font-weight: 900;
+    }
+    .legend-done { background: #dff3e6; color: #278056; }
+    .legend-none { background: #f0ece9; color: #9b918b; }
     .calendar-day {
       position: relative;
       aspect-ratio: 1;
@@ -186,18 +207,34 @@
     .calendar-day.other-month { color: #bdb3ac; }
     .calendar-day.today { box-shadow: inset 0 0 0 2px var(--yellow); }
     .calendar-day.selected { background: var(--orange); color: white; }
-    .calendar-day.has-record::after {
-      content: "";
-      position: absolute;
-      left: 50%;
-      bottom: 5px;
-      width: 5px;
-      height: 5px;
-      border-radius: 50%;
-      background: var(--green);
-      transform: translateX(-50%);
+    .calendar-day.has-chore {
+      background: #dff3e6;
+      color: #267c53;
     }
-    .calendar-day.selected::after { background: white; }
+    .calendar-day.no-chore {
+      background: #f0ece9;
+      color: #948a84;
+    }
+    .calendar-day.has-chore::after,
+    .calendar-day.no-chore::after {
+      position: absolute;
+      right: 3px;
+      bottom: 1px;
+      font-size: 10px;
+      font-weight: 900;
+    }
+    .calendar-day.has-chore::after { content: "✓"; color: #278056; }
+    .calendar-day.no-chore::after { content: "−"; color: #aaa09a; }
+    .calendar-day.selected {
+      background: var(--orange);
+      color: white;
+    }
+    .calendar-day.selected::after { color: white; }
+    .calendar-day.other-month:not(.selected) {
+      background: transparent;
+      color: #bdb3ac;
+    }
+    .calendar-day.other-month::after { content: none; }
     h2 { margin: 0; font-size: 18px; }
     .section-note { margin: 0; color: var(--muted); font-size: 11px; }
     .chores { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -537,6 +574,10 @@
         <div class="calendar-title" id="calendar-title"></div>
         <button class="month-button" id="next-month" type="button" aria-label="次の月">›</button>
       </div>
+      <div class="calendar-legend">
+        <span><i class="legend-mark legend-done">✓</i>お手伝いあり</span>
+        <span><i class="legend-mark legend-none">−</i>お手伝いなし</span>
+      </div>
       <div class="calendar-weekdays" aria-hidden="true">
         <span>日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span>
       </div>
@@ -672,20 +713,32 @@
       document.querySelector("#calendar-title").textContent = `${year}年 ${month + 1}月`;
       const firstDay = new Date(year, month, 1);
       const gridStart = new Date(year, month, 1 - firstDay.getDay());
-      const recordDates = new Set(state.entries.map(entry => dateKey(new Date(entry.date))));
+      const choreDates = new Set(
+        state.entries
+          .filter(entry => entry.type === "chore")
+          .map(entry => dateKey(new Date(entry.date)))
+      );
       const today = new Date();
+      const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
       const days = [];
       for (let index = 0; index < 42; index++) {
         const date = new Date(gridStart);
         date.setDate(gridStart.getDate() + index);
+        const isCurrentMonth = date.getMonth() === month;
+        const isPastOrToday = date <= todayStart;
+        const hasChore = choreDates.has(dateKey(date));
         const classes = [
           "calendar-day",
-          date.getMonth() !== month ? "other-month" : "",
+          !isCurrentMonth ? "other-month" : "",
           sameDay(date, today) ? "today" : "",
           sameDay(date, selectedHistoryDate) ? "selected" : "",
-          recordDates.has(dateKey(date)) ? "has-record" : ""
+          isCurrentMonth && hasChore ? "has-chore" : "",
+          isCurrentMonth && isPastOrToday && !hasChore ? "no-chore" : ""
         ].filter(Boolean).join(" ");
-        days.push(`<button class="${classes}" type="button" data-calendar-date="${date.getFullYear()}-${date.getMonth()}-${date.getDate()}">${date.getDate()}</button>`);
+        const status = isCurrentMonth
+          ? hasChore ? "お手伝いあり" : isPastOrToday ? "お手伝いなし" : ""
+          : "";
+        days.push(`<button class="${classes}" type="button" data-calendar-date="${date.getFullYear()}-${date.getMonth()}-${date.getDate()}" aria-label="${date.getMonth() + 1}月${date.getDate()}日 ${status}">${date.getDate()}</button>`);
       }
       document.querySelector("#calendar-grid").innerHTML = days.join("");
     }
