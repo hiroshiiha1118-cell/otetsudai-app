@@ -108,6 +108,21 @@
       align-items: flex-end;
       margin: 25px 2px 12px;
     }
+    .history-toggle {
+      width: 100%;
+      padding: 15px 17px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(255,255,255,.78);
+      box-shadow: 0 5px 16px rgba(95,67,47,.07);
+      font-size: 16px;
+      font-weight: 900;
+      text-align: left;
+      cursor: pointer;
+    }
+    .history-toggle span { float: right; color: var(--orange-dark); }
+    .history-wrap { display: none; margin-top: 10px; }
+    .history-wrap.open { display: block; }
     h2 { margin: 0; font-size: 18px; }
     .section-note { margin: 0; color: var(--muted); font-size: 11px; }
     .chores { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -264,6 +279,21 @@
     .parent-divider { height: 1px; margin: 18px 0; background: var(--line); }
     .setting-title { margin: 0 0 7px; font-size: 14px; font-weight: 900; }
     .new-pin { font-size: 17px; letter-spacing: .2em; }
+    .confirm-copy {
+      margin: 4px 0 20px;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.7;
+      text-align: center;
+    }
+    .confirm-copy strong {
+      display: block;
+      margin-top: 7px;
+      color: var(--ink);
+      font-size: 22px;
+    }
+    .confirm-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .confirm-actions .secondary { margin: 0; }
     .toast {
       position: fixed;
       z-index: 10;
@@ -329,6 +359,11 @@
         <span class="chore-name">ハイボール作り</span>
         <span class="price">+10円</span>
       </button>
+      <button class="chore" type="button" data-chore="洗濯物取り込み" data-price="10">
+        <span class="chore-icon" aria-hidden="true">👕</span>
+        <span class="chore-name">洗濯物取り込み</span>
+        <span class="price">+10円</span>
+      </button>
       <button class="chore cleanup" id="open-cleanup" type="button">
         <span class="chore-icon" aria-hidden="true">✨</span>
         <span class="chore-name">お片付け</span>
@@ -336,10 +371,13 @@
       </button>
     </section>
 
-    <div class="section-head">
-      <h2>さいきんの記録</h2>
+    <div class="section-head"></div>
+    <button class="history-toggle" id="history-toggle" type="button" aria-expanded="false">
+      今日の記録 <span id="history-arrow">▼</span>
+    </button>
+    <div class="history-wrap" id="history-wrap">
+      <section class="history-list" id="history" aria-label="今日の記録"></section>
     </div>
-    <section class="history-list" id="history" aria-label="最近の記録"></section>
   </main>
 
   <dialog id="cleanup-dialog">
@@ -355,7 +393,23 @@
         <button class="cleanup-option" type="button" data-chore="フロ掃除" data-price="20"><span>🛁 フロ掃除</span><span>+20円</span></button>
         <button class="cleanup-option" type="button" data-chore="掃除機（1階）" data-price="20"><span>🧹 掃除機（1階）</span><span>+20円</span></button>
         <button class="cleanup-option" type="button" data-chore="掃除機（2階）" data-price="20"><span>🧹 掃除機（2階）</span><span>+20円</span></button>
-        <button class="cleanup-option" type="button" data-chore="洗濯物取り込み" data-price="10"><span>👕 洗濯物取り込み</span><span>+10円</span></button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="confirm-dialog">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>お手伝いできた？</h2>
+        <button class="close" type="button" data-close="confirm-dialog" aria-label="閉じる">×</button>
+      </div>
+      <p class="confirm-copy">
+        このお手伝いを記録しますか？
+        <strong id="confirm-chore"></strong>
+      </p>
+      <div class="confirm-actions">
+        <button class="secondary" id="confirm-not-yet" type="button">まだ</button>
+        <button class="primary" id="confirm-ok" type="button">OK</button>
       </div>
     </div>
   </dialog>
@@ -395,6 +449,7 @@
     const state = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{"entries":[]}');
     let lastAddedId = null;
     let toastTimer = null;
+    let pendingChore = null;
 
     const yen = value => new Intl.NumberFormat("ja-JP").format(value);
     const currentEntries = () => {
@@ -422,12 +477,18 @@
       document.querySelector("#count").textContent = entries.length;
       document.querySelector("#parent-balance").textContent = yen(currentBalance());
       const history = document.querySelector("#history");
-      const recent = [...state.entries].reverse().slice(0, 8);
-      if (!recent.length) {
-        history.innerHTML = '<div class="empty">お手伝いをすると、ここに記録が出るよ</div>';
+      const today = new Date();
+      const todayEntries = [...state.entries].filter(entry => {
+        const date = new Date(entry.date);
+        return date.getFullYear() === today.getFullYear() &&
+          date.getMonth() === today.getMonth() &&
+          date.getDate() === today.getDate();
+      }).reverse();
+      if (!todayEntries.length) {
+        history.innerHTML = '<div class="empty">今日のお手伝いは、まだありません</div>';
         return;
       }
-      history.innerHTML = recent.map(entry => entry.type === "payout" ? `
+      history.innerHTML = todayEntries.map(entry => entry.type === "payout" ? `
         <div class="history-item payout">
           <span class="history-dot"></span>
           <span class="history-main"><span class="history-name">おこづかいを受け取りました</span><span class="history-date">${formatDate(entry.date, true)}</span></span>
@@ -461,11 +522,36 @@
       year: "numeric", month: "long", day: "numeric", weekday: "short"
     }).format(new Date());
 
+    const confirmDialog = document.querySelector("#confirm-dialog");
     document.querySelectorAll("[data-chore]").forEach(button => {
       button.addEventListener("click", () => {
-        addChore(button.dataset.chore, Number(button.dataset.price));
+        pendingChore = {
+          name: button.dataset.chore,
+          price: Number(button.dataset.price)
+        };
         button.closest("dialog")?.close();
+        document.querySelector("#confirm-chore").textContent =
+          `${pendingChore.name}　＋${pendingChore.price}円`;
+        confirmDialog.showModal();
       });
+    });
+
+    document.querySelector("#confirm-ok").addEventListener("click", () => {
+      if (!pendingChore) return;
+      addChore(pendingChore.name, pendingChore.price);
+      pendingChore = null;
+      confirmDialog.close();
+    });
+    document.querySelector("#confirm-not-yet").addEventListener("click", () => {
+      pendingChore = null;
+      confirmDialog.close();
+    });
+
+    document.querySelector("#history-toggle").addEventListener("click", () => {
+      const wrap = document.querySelector("#history-wrap");
+      const isOpen = wrap.classList.toggle("open");
+      document.querySelector("#history-toggle").setAttribute("aria-expanded", String(isOpen));
+      document.querySelector("#history-arrow").textContent = isOpen ? "▲" : "▼";
     });
 
     document.querySelector("#open-cleanup").addEventListener("click", () => {
