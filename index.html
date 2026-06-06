@@ -72,6 +72,18 @@
       font-weight: 700;
       cursor: pointer;
     }
+    .header-actions { display: grid; justify-items: end; gap: 6px; }
+    .user-button {
+      border: 0;
+      border-radius: 999px;
+      padding: 8px 12px;
+      background: #e9f6ed;
+      color: #287451;
+      font-size: 12px;
+      font-weight: 900;
+      cursor: pointer;
+    }
+    .sync-status { color: var(--muted); font-size: 9px; }
     .balance-card {
       position: relative;
       overflow: hidden;
@@ -360,6 +372,16 @@
     .history-main { min-width: 0; flex: 1; }
     .history-name { display: block; overflow: hidden; font-size: 13px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
     .history-date { display: block; margin-top: 2px; color: var(--muted); font-size: 10px; }
+    .member-tag {
+      display: inline-block;
+      margin-right: 5px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: #e9f6ed;
+      color: #287451;
+      font-size: 9px;
+      font-weight: 900;
+    }
     .history-value { font-size: 14px; font-weight: 900; color: var(--green); }
     .history-item.payout .history-value { color: var(--orange-dark); }
 
@@ -437,6 +459,38 @@
     .parent-divider { height: 1px; margin: 18px 0; background: var(--line); }
     .setting-title { margin: 0 0 7px; font-size: 14px; font-weight: 900; }
     .new-pin { font-size: 17px; letter-spacing: .2em; }
+    .name-input {
+      width: 100%;
+      padding: 13px 14px;
+      border: 2px solid var(--line);
+      border-radius: 15px;
+      outline: none;
+    }
+    .name-input:focus { border-color: var(--orange); }
+    .member-list { display: grid; gap: 9px; margin: 14px 0; }
+    .member-option {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      padding: 13px 14px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: white;
+      text-align: left;
+      font-weight: 900;
+      cursor: pointer;
+    }
+    .member-avatar {
+      display: grid;
+      place-items: center;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: #e9f6ed;
+      color: #287451;
+    }
+    .setup-note { color: var(--muted); font-size: 13px; line-height: 1.7; }
     .confirm-copy {
       margin: 4px 0 20px;
       color: var(--muted);
@@ -488,7 +542,11 @@
           <p class="today" id="today"></p>
         </div>
       </div>
-      <button class="parent-button" id="open-parent" type="button">🔒 おうちの人</button>
+      <div class="header-actions">
+        <button class="user-button" id="switch-user" type="button">👤 名前を選ぶ</button>
+        <button class="parent-button" id="open-parent" type="button">🔒 おうちの人</button>
+        <span class="sync-status" id="sync-status">クラウド接続中…</span>
+      </div>
     </header>
 
     <section class="balance-card" aria-live="polite">
@@ -602,6 +660,20 @@
     </div>
   </dialog>
 
+  <dialog id="setup-dialog">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>だれが使う？</h2>
+      </div>
+      <p class="setup-note">最初にお子さまの名前を登録してください。兄弟・姉妹の名前を複数登録できます。</p>
+      <div class="member-list" id="member-list"></div>
+      <p class="setting-title">新しい名前を追加</p>
+      <input class="name-input" id="member-name" type="text" maxlength="12" placeholder="例：ひろし" autocomplete="off">
+      <button class="secondary" id="add-member" type="button">名前を追加する</button>
+      <p class="error" id="member-error"></p>
+    </div>
+  </dialog>
+
   <dialog id="parent-dialog">
     <div class="modal">
       <div class="modal-head">
@@ -615,8 +687,15 @@
         <button class="primary" id="unlock" type="button">ひらく</button>
       </div>
       <div class="parent-panel" id="parent-panel">
-        <div class="parent-stat">今回のお支払い金額<strong><span id="parent-balance">0</span>円</strong></div>
+        <div class="parent-stat"><span id="payout-member-name">選択中</span>のお支払い金額<strong><span id="parent-balance">0</span>円</strong></div>
         <button class="danger" id="payout" type="button">支払い済みにして 0円にする</button>
+        <div class="parent-divider"></div>
+        <p class="setting-title">子どもの名前を追加</p>
+        <input class="name-input" id="parent-member-name" type="text" maxlength="12" placeholder="新しい名前" autocomplete="off">
+        <button class="secondary" id="parent-add-member" type="button">名前を追加する</button>
+        <div class="parent-divider"></div>
+        <p class="setting-title">家族のスマホと共有</p>
+        <button class="secondary" id="share-family" type="button">家族用リンクを共有する</button>
         <div class="parent-divider"></div>
         <p class="setting-title">暗証番号を変更</p>
         <input class="pin-input new-pin" id="new-pin" type="password" inputmode="numeric" maxlength="4" placeholder="新しい4桁" autocomplete="off" aria-label="新しい暗証番号">
@@ -631,7 +710,8 @@
     <button class="undo" id="undo" type="button">取り消す</button>
   </div>
 
-  <script>
+  <script type="module" src="app.js"></script>
+  <script type="text/plain">
     const STORAGE_KEY = "otetsudai-bank-v1";
     const PIN_KEY = "otetsudai-parent-pin";
     const state = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{"entries":[]}');

@@ -1,5 +1,5 @@
-const CACHE = "otetsudai-bank-v7";
-const FILES = ["./", "./index.html", "./manifest.webmanifest"];
+const CACHE = "otetsudai-bank-v10";
+const FILES = ["./", "./index.html", "./app.js", "./manifest.webmanifest"];
 
 self.addEventListener("install", event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES)));
