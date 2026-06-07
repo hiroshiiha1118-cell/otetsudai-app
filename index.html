@@ -385,6 +385,17 @@
     .history-main { min-width: 0; flex: 1; }
     .history-name { display: block; overflow: hidden; font-size: 13px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
     .history-date { display: block; margin-top: 2px; color: var(--muted); font-size: 10px; }
+    .adjustment-note {
+      display: block;
+      margin-top: 5px;
+      padding: 4px 7px;
+      border-radius: 8px;
+      font-size: 10px;
+      font-weight: 900;
+      line-height: 1.45;
+    }
+    .adjustment-note.minus { background: #fff0ed; color: #c7452d; }
+    .adjustment-note.plus { background: #e9f6ed; color: #287451; }
     .member-tag {
       display: inline-block;
       margin-right: 5px;
@@ -587,10 +598,68 @@
       border-bottom: 1px solid #f0e7e0;
     }
     .breakdown-row:last-child { border-bottom: 0; }
+    .breakdown-row.adjustable {
+      cursor: pointer;
+      touch-action: pan-y;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .breakdown-row.adjustable:active { background: #fff8f5; }
     .breakdown-chore { font-size: 13px; font-weight: 800; }
     .breakdown-date { display: block; margin-top: 2px; color: var(--muted); font-size: 10px; }
     .breakdown-price { align-self: center; color: var(--green); font-size: 14px; font-weight: 900; }
+    .breakdown-price.adjusted { color: var(--orange-dark); }
+    .breakdown-base {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 9px;
+      font-weight: 700;
+    }
     .breakdown-empty { padding: 15px; color: var(--muted); font-size: 12px; text-align: center; }
+    .adjust-step[hidden] { display: none; }
+    .adjust-target {
+      margin: -4px 0 16px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
+      text-align: center;
+    }
+    .adjust-question {
+      margin: 0 0 13px;
+      font-size: 14px;
+      font-weight: 900;
+      text-align: center;
+    }
+    .adjust-sign-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .adjust-sign {
+      min-height: 100px;
+      border: 0;
+      border-radius: 22px;
+      font-size: 48px;
+      font-weight: 900;
+      cursor: pointer;
+    }
+    .adjust-sign.minus { background: #fff0ed; color: #c7452d; }
+    .adjust-sign.plus { background: #e9f6ed; color: #287451; }
+    .adjust-options { display: grid; grid-template-columns: repeat(2, 1fr); gap: 9px; }
+    .adjust-option {
+      min-height: 52px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      background: white;
+      color: var(--ink);
+      font-weight: 900;
+      cursor: pointer;
+    }
+    .adjust-option.minus { background: #fff8f5; color: #c7452d; }
+    .adjust-option.plus { background: #f3fbf5; color: #287451; }
+    .adjust-reasons { grid-template-columns: 1fr; }
     .confirm-copy {
       margin: 4px 0 20px;
       color: var(--muted);
@@ -777,8 +846,33 @@
         <h2>たまっているお金の内訳</h2>
         <button class="close" type="button" data-close="breakdown-dialog" aria-label="閉じる">×</button>
       </div>
-      <p class="setup-note">まだ支払われていないお手伝いを、子どもごとに表示しています。</p>
+      <p class="setup-note" id="breakdown-note">まだ支払われていないお手伝いを、子どもごとに表示しています。</p>
       <div class="breakdown-list" id="breakdown-list"></div>
+    </div>
+  </dialog>
+
+  <dialog id="adjustment-dialog">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>お手伝いポイントの調整</h2>
+        <button class="close" type="button" data-close="adjustment-dialog" aria-label="閉じる">×</button>
+      </div>
+      <p class="adjust-target" id="adjustment-target"></p>
+      <section class="adjust-step" id="adjust-step-sign">
+        <p class="adjust-question">ポイントを減らす？ 増やす？</p>
+        <div class="adjust-sign-grid">
+          <button class="adjust-sign minus" type="button" data-adjust-sign="minus" aria-label="減らす">−</button>
+          <button class="adjust-sign plus" type="button" data-adjust-sign="plus" aria-label="増やす">＋</button>
+        </div>
+      </section>
+      <section class="adjust-step" id="adjust-step-amount" hidden>
+        <p class="adjust-question">変更する金額を選んでください</p>
+        <div class="adjust-options" id="adjustment-amounts"></div>
+      </section>
+      <section class="adjust-step" id="adjust-step-reason" hidden>
+        <p class="adjust-question">理由を選んでください</p>
+        <div class="adjust-options adjust-reasons" id="adjustment-reasons"></div>
+      </section>
     </div>
   </dialog>
 

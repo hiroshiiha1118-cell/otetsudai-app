@@ -49,10 +49,43 @@ let longPressStart = null;
 let selectedHistoryDate = new Date();
 let calendarViewDate = new Date();
 let syncing = false;
+let breakdownMemberId = null;
+let breakdownLongPressTimer = null;
+let breakdownLongPressStart = null;
+let adjustmentEntryId = null;
+let adjustmentSign = null;
+let adjustmentAmount = null;
 
 const yen = value => new Intl.NumberFormat("ja-JP").format(value);
 const activeMember = () => state.members.find(member => member.id === activeMemberId);
 const membersById = () => Object.fromEntries(state.members.map(member => [member.id, member]));
+const isParentMode = () => activeMember()?.role === "parent" && parentAuthorized;
+const entryAdjustment = entry => Number(entry.adjustment?.amount) || 0;
+const entryTotal = entry => Number(entry.price) + entryAdjustment(entry);
+const entriesTotal = entries => Math.max(
+  0,
+  entries.reduce((sum, entry) => sum + entryTotal(entry), 0),
+);
+const signedYen = value => `${value > 0 ? "+" : ""}${yen(value)}円`;
+
+const adjustmentAmounts = {
+  minus: [10, 20, 30, 50, 100, 150, 200],
+  plus: [10, 20, 30, 50, 100],
+};
+
+const adjustmentReasons = {
+  minus: [
+    "すぐにやらなかった",
+    "途中でやめた",
+    "遊び始めた",
+    "その日で終わらせなかった",
+  ],
+  plus: [
+    "徹底的にやってくれた",
+    "＋αでやってくれた",
+    "早く終わらしてくれた",
+  ],
+};
 
 function setSyncStatus(text) {
   document.querySelector("#sync-status").textContent = text;
@@ -110,7 +143,7 @@ function currentEntries() {
 }
 
 function currentBalance() {
-  return currentEntries().reduce((sum, entry) => sum + entry.price, 0);
+  return entriesTotal(currentEntries());
 }
 
 function showToast(message, canUndo = true) {
@@ -234,6 +267,10 @@ function renderHistory() {
           <span class="history-value">-${yen(entry.amount)}円</span>
         </div>`;
     }
+    const adjustment = entryAdjustment(entry);
+    const adjustmentNote = adjustment
+      ? `<span class="adjustment-note ${adjustment < 0 ? "minus" : "plus"}">親からの調整 ${signedYen(adjustment)}：${entry.adjustment.reason}</span>`
+      : "";
     return `
       <div class="history-item ${selectedEntryIds.has(entry.id) ? "selected" : ""}" data-entry-id="${entry.id}">
         <span class="history-check">${selectedEntryIds.has(entry.id) ? "✓" : ""}</span>
@@ -241,8 +278,9 @@ function renderHistory() {
         <span class="history-main">
           <span class="history-name"><span class="member-tag">${memberName}</span>${entry.name}</span>
           <span class="history-date">${formatDate(entry.date, true)}・${selectionMode ? "タップで選択" : "長押しで削除選択"}</span>
+          ${adjustmentNote}
         </span>
-        <span class="history-value">+${yen(entry.price)}円</span>
+        <span class="history-value">${signedYen(entryTotal(entry))}</span>
       </div>`;
   }).join("");
 }
@@ -282,7 +320,12 @@ function renderCalendar() {
 }
 
 function renderBreakdown(onlyMemberId = null) {
+  breakdownMemberId = onlyMemberId;
   const container = document.querySelector("#breakdown-list");
+  const adjustable = Boolean(onlyMemberId && isParentMode());
+  document.querySelector("#breakdown-note").textContent = adjustable
+    ? "お手伝い項目を長押しすると、ポイントの加算・減算と理由を登録できます。"
+    : "まだ支払われていないお手伝いを、子どもごとに表示しています。";
   const children = state.members.filter(member =>
     member.role !== "parent" && (!onlyMemberId || member.id === onlyMemberId)
   );
@@ -292,17 +335,27 @@ function renderBreakdown(onlyMemberId = null) {
   }
   container.innerHTML = children.map(member => {
     const entries = unpaidEntriesForMember(member.id);
-    const total = entries.reduce((sum, entry) => sum + entry.price, 0);
+    const total = entriesTotal(entries);
     const rows = entries.length
-      ? [...entries].reverse().map(entry => `
-          <div class="breakdown-row">
+      ? [...entries].reverse().map(entry => {
+        const adjustment = entryAdjustment(entry);
+        const adjustmentNote = adjustment
+          ? `<span class="adjustment-note ${adjustment < 0 ? "minus" : "plus"}">${signedYen(adjustment)}：${entry.adjustment.reason}</span>`
+          : "";
+        return `
+          <div class="breakdown-row ${adjustable ? "adjustable" : ""}" ${adjustable ? `data-adjust-entry="${entry.id}"` : ""}>
             <span class="breakdown-chore">
               ${entry.name}
               <span class="breakdown-date">${formatDate(entry.date, true)}</span>
+              ${adjustmentNote}
             </span>
-            <span class="breakdown-price">+${yen(entry.price)}円</span>
+            <span class="breakdown-price ${adjustment ? "adjusted" : ""}">
+              ${signedYen(entryTotal(entry))}
+              ${adjustment ? `<span class="breakdown-base">基本 ${yen(entry.price)}円</span>` : ""}
+            </span>
           </div>
-        `).join("")
+        `;
+      }).join("")
       : '<div class="breakdown-empty">現在たまっているお金はありません</div>';
     return `
       <section class="breakdown-member">
@@ -325,7 +378,7 @@ function renderParentDashboard() {
   }
   container.innerHTML = children.map(member => {
     const entries = unpaidEntriesForMember(member.id);
-    const total = entries.reduce((sum, entry) => sum + entry.price, 0);
+    const total = entriesTotal(entries);
     return `
       <section class="parent-child-card">
         <div class="parent-child-head">
@@ -359,13 +412,13 @@ function renderParentMemberList() {
 
 function render() {
   const member = activeMember();
-  const isParentMode = member?.role === "parent" && parentAuthorized;
+  const parentMode = member?.role === "parent" && parentAuthorized;
   document.querySelector("#switch-user").textContent = member ? `👤 ${member.name}` : "👤 名前を選ぶ";
-  document.querySelector("#open-parent").hidden = !isParentMode;
-  document.querySelector("#parent-dashboard").classList.toggle("active", isParentMode);
-  document.querySelector("#child-balance-card").style.display = isParentMode ? "none" : "";
-  document.querySelector("#chore-heading").style.display = isParentMode ? "none" : "";
-  document.querySelector("#chore-list").style.display = isParentMode ? "none" : "";
+  document.querySelector("#open-parent").hidden = !parentMode;
+  document.querySelector("#parent-dashboard").classList.toggle("active", parentMode);
+  document.querySelector("#child-balance-card").style.display = parentMode ? "none" : "";
+  document.querySelector("#chore-heading").style.display = parentMode ? "none" : "";
+  document.querySelector("#chore-list").style.display = parentMode ? "none" : "";
   document.querySelector("#balance-label").textContent = member
     ? `${member.name}の いま たまっているお金`
     : "いま たまっているお金";
@@ -375,7 +428,7 @@ function render() {
   document.querySelector("#payout-member-name").textContent = member?.name || "選択中";
   renderHistory();
   renderMemberList();
-  renderBreakdown();
+  renderBreakdown(document.querySelector("#breakdown-dialog").open ? breakdownMemberId : null);
   renderParentDashboard();
   renderParentMemberList();
   if (
@@ -553,6 +606,105 @@ document.querySelector("#open-breakdown").addEventListener("click", () => {
   renderBreakdown();
   document.querySelector("#breakdown-dialog").showModal();
 });
+
+function showAdjustmentStep(step) {
+  document.querySelector("#adjust-step-sign").hidden = step !== "sign";
+  document.querySelector("#adjust-step-amount").hidden = step !== "amount";
+  document.querySelector("#adjust-step-reason").hidden = step !== "reason";
+}
+
+function openAdjustment(entryId) {
+  if (!isParentMode()) return;
+  const entry = state.entries.find(candidate => candidate.id === entryId && candidate.type === "chore");
+  if (!entry) return;
+  adjustmentEntryId = entry.id;
+  adjustmentSign = null;
+  adjustmentAmount = null;
+  document.querySelector("#adjustment-target").textContent =
+    `${entry.memberName || "子ども"}・${entry.name}（基本 ${yen(entry.price)}円）`;
+  showAdjustmentStep("sign");
+  document.querySelector("#adjustment-dialog").showModal();
+  navigator.vibrate?.(35);
+}
+
+function clearBreakdownLongPress() {
+  clearTimeout(breakdownLongPressTimer);
+  breakdownLongPressTimer = null;
+  breakdownLongPressStart = null;
+}
+
+const breakdownList = document.querySelector("#breakdown-list");
+breakdownList.addEventListener("pointerdown", event => {
+  const row = event.target.closest("[data-adjust-entry]");
+  if (!row || !isParentMode()) return;
+  clearBreakdownLongPress();
+  breakdownLongPressStart = { x: event.clientX, y: event.clientY };
+  breakdownLongPressTimer = setTimeout(() => {
+    breakdownLongPressTimer = null;
+    openAdjustment(row.dataset.adjustEntry);
+  }, 650);
+});
+breakdownList.addEventListener("pointerup", clearBreakdownLongPress);
+breakdownList.addEventListener("pointercancel", clearBreakdownLongPress);
+breakdownList.addEventListener("pointermove", event => {
+  if (!breakdownLongPressStart) return;
+  if (Math.hypot(
+    event.clientX - breakdownLongPressStart.x,
+    event.clientY - breakdownLongPressStart.y,
+  ) > 12) {
+    clearBreakdownLongPress();
+  }
+});
+breakdownList.addEventListener("contextmenu", event => {
+  if (event.target.closest("[data-adjust-entry]")) event.preventDefault();
+});
+
+document.querySelector("#adjust-step-sign").addEventListener("click", event => {
+  const button = event.target.closest("[data-adjust-sign]");
+  if (!button) return;
+  adjustmentSign = button.dataset.adjustSign;
+  const direction = adjustmentSign === "minus" ? -1 : 1;
+  document.querySelector("#adjustment-amounts").innerHTML =
+    adjustmentAmounts[adjustmentSign].map(amount => `
+      <button class="adjust-option ${adjustmentSign}" type="button" data-adjust-amount="${amount}">
+        ${signedYen(direction * amount)}
+      </button>
+    `).join("");
+  showAdjustmentStep("amount");
+});
+
+document.querySelector("#adjustment-amounts").addEventListener("click", event => {
+  const button = event.target.closest("[data-adjust-amount]");
+  if (!button || !adjustmentSign) return;
+  adjustmentAmount = Number(button.dataset.adjustAmount);
+  document.querySelector("#adjustment-reasons").innerHTML =
+    adjustmentReasons[adjustmentSign].map(reason => `
+      <button class="adjust-option ${adjustmentSign}" type="button" data-adjust-reason="${reason}">
+        ${reason}
+      </button>
+    `).join("");
+  showAdjustmentStep("reason");
+});
+
+document.querySelector("#adjustment-reasons").addEventListener("click", async event => {
+  const button = event.target.closest("[data-adjust-reason]");
+  if (!button || !adjustmentEntryId || !adjustmentSign || !adjustmentAmount) return;
+  const entry = state.entries.find(candidate => candidate.id === adjustmentEntryId);
+  if (!entry || !isParentMode()) return;
+  const amount = adjustmentSign === "minus" ? -adjustmentAmount : adjustmentAmount;
+  const reason = button.dataset.adjustReason;
+  await cloudSet(`entries/${entry.id}/adjustment`, {
+    amount,
+    reason,
+    updatedAt: new Date().toISOString(),
+    updatedBy: activeMember()?.name || "親",
+  });
+  document.querySelector("#adjustment-dialog").close();
+  await syncFromCloud();
+  renderBreakdown(breakdownMemberId);
+  showToast(`${entry.name}を${signedYen(amount)}調整しました`, false);
+});
+
 document.querySelectorAll("[data-close]").forEach(button => {
   button.addEventListener("click", () => document.querySelector(`#${button.dataset.close}`).close());
 });
@@ -625,7 +777,7 @@ document.querySelector("#pin").addEventListener("keydown", event => {
 async function payMember(memberId) {
   const member = state.members.find(candidate => candidate.id === memberId && candidate.role !== "parent");
   const entries = unpaidEntriesForMember(memberId);
-  const amount = entries.reduce((sum, entry) => sum + entry.price, 0);
+  const amount = entriesTotal(entries);
   if (!member) {
     return;
   }
