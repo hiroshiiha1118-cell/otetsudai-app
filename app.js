@@ -378,7 +378,13 @@ function render() {
   renderBreakdown();
   renderParentDashboard();
   renderParentMemberList();
-  if (cloudReady && (!member || !state.members.length)) showMemberSetup();
+  if (
+    cloudReady &&
+    (!member || !state.members.length) &&
+    !document.querySelector("#parent-dialog").open
+  ) {
+    showMemberSetup();
+  }
 }
 
 async function addChore(name, price) {
@@ -566,20 +572,6 @@ document.querySelector("#member-list").addEventListener("click", event => {
 });
 document.querySelector("#setup-dialog").addEventListener("cancel", event => {
   if (!activeMember()) event.preventDefault();
-});
-
-document.querySelector("#add-member").addEventListener("click", async () => {
-  const input = document.querySelector("#member-name");
-  const error = document.querySelector("#member-error");
-  try {
-    await addMember(input.value, true);
-    input.value = "";
-    error.style.color = "#32845a";
-    error.textContent = "追加しました。使う人を上の一覧から選んでください";
-  } catch (reason) {
-    error.style.color = "#c7452d";
-    error.textContent = reason.message;
-  }
 });
 
 const parentDialog = document.querySelector("#parent-dialog");
