@@ -59,6 +59,9 @@ let rewardMemberId = null;
 let rewardAmount = null;
 let rewardEntryId = null;
 let managedEntryId = null;
+let calendarMemberId = null;
+let historyMemberId = null;
+let pendingPayoutMemberId = null;
 
 const yen = value => new Intl.NumberFormat("ja-JP").format(value);
 const activeMember = () => state.members.find(member => member.id === activeMemberId);
@@ -197,6 +200,8 @@ function chooseMember(memberId) {
   }
   activeMemberId = memberId;
   localStorage.setItem(memberStorageKey, memberId);
+  historyMemberId = member.role === "parent" ? null : member.id;
+  calendarMemberId = member.role === "parent" ? null : member.id;
   document.querySelector("#setup-dialog").close();
   render();
 }
@@ -250,16 +255,22 @@ async function addMember(name, selectAfter = false, role = "child") {
 function renderHistory() {
   const history = document.querySelector("#history");
   const memberMap = membersById();
+  const member = activeMember();
+  const visibleMemberId = member?.role === "parent" ? historyMemberId : activeMemberId;
   history.classList.toggle("selection-mode", selectionMode);
   document.querySelector("#selection-toolbar").classList.toggle("active", selectionMode);
   document.querySelector("#selection-count").textContent = `${selectedEntryIds.size}件を選択中`;
   const selectedEntries = [...state.entries]
     .filter(entry => sameDay(new Date(entry.date), selectedHistoryDate))
+    .filter(entry => !visibleMemberId || entry.memberId === visibleMemberId)
     .sort((first, second) => new Date(second.date) - new Date(first.date));
   const today = new Date();
-  document.querySelector("#history-label").textContent = sameDay(selectedHistoryDate, today)
+  const memberLabel = member?.role === "parent" && visibleMemberId
+    ? `${memberMap[visibleMemberId]?.name || "子ども"}さん・`
+    : "";
+  document.querySelector("#history-label").textContent = memberLabel + (sameDay(selectedHistoryDate, today)
     ? "今日の記録"
-    : `${selectedHistoryDate.getMonth() + 1}月${selectedHistoryDate.getDate()}日の記録`;
+    : `${selectedHistoryDate.getMonth() + 1}月${selectedHistoryDate.getDate()}日の記録`);
   history.setAttribute("aria-label", document.querySelector("#history-label").textContent);
   if (!selectedEntries.length) {
     history.innerHTML = '<div class="empty">この日のお手伝い記録はありません</div>';
@@ -311,11 +322,18 @@ function renderHistory() {
 function renderCalendar() {
   const year = calendarViewDate.getFullYear();
   const month = calendarViewDate.getMonth();
+  const calendarMember = state.members.find(member => member.id === calendarMemberId);
+  document.querySelector("#calendar-dialog-title").textContent = calendarMember
+    ? `${calendarMember.name}さんのカレンダー`
+    : "記録を見る日を選ぶ";
   document.querySelector("#calendar-title").textContent = `${year}年 ${month + 1}月`;
   const firstDay = new Date(year, month, 1);
   const gridStart = new Date(year, month, 1 - firstDay.getDay());
   const choreDates = new Set(
-    state.entries.filter(entry => entry.type === "chore").map(entry => dateKey(new Date(entry.date))),
+    state.entries
+      .filter(entry => entry.type === "chore")
+      .filter(entry => !calendarMemberId || entry.memberId === calendarMemberId)
+      .map(entry => dateKey(new Date(entry.date))),
   );
   const today = new Date();
   const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -417,7 +435,7 @@ function renderParentDashboard() {
     return `
       <section class="parent-child-card">
         <div class="parent-child-head">
-          <span>👤 ${member.name}</span>
+          <button class="parent-child-name" type="button" data-parent-calendar="${member.id}">👤 ${member.name}</button>
           <span class="parent-child-balance">${yen(total)}円</span>
         </div>
         <p class="parent-child-meta">未払いの記録 ${entries.length}件</p>
@@ -603,6 +621,7 @@ document.querySelector("#cancel-selection").addEventListener("click", cancelSele
 
 const calendarDialog = document.querySelector("#calendar-dialog");
 document.querySelector("#open-calendar").addEventListener("click", () => {
+  calendarMemberId = activeMember()?.role === "parent" ? null : activeMemberId;
   calendarViewDate = new Date(selectedHistoryDate.getFullYear(), selectedHistoryDate.getMonth(), 1);
   renderCalendar();
   calendarDialog.showModal();
@@ -621,6 +640,7 @@ document.querySelector("#calendar-grid").addEventListener("click", event => {
   const [year, month, date] = day.dataset.calendarDate.split("-").map(Number);
   cancelSelection();
   selectedHistoryDate = new Date(year, month, date);
+  historyMemberId = activeMember()?.role === "parent" ? calendarMemberId : activeMemberId;
   renderHistory();
   calendarDialog.close();
   document.querySelector("#history-wrap").classList.add("open");
@@ -844,6 +864,8 @@ function unlockParent() {
     pendingParentMemberId = null;
     activeMemberId = memberId;
     localStorage.setItem(memberStorageKey, memberId);
+    historyMemberId = null;
+    calendarMemberId = null;
     parentDialog.close();
     if (document.querySelector("#setup-dialog").open) document.querySelector("#setup-dialog").close();
     render();
@@ -871,7 +893,23 @@ async function payMember(memberId) {
     document.querySelector("#setting-message").textContent = "現在の残高は0円です";
     return;
   }
-  if (!confirm(`${member.name}さんへ${yen(amount)}円を支払い済みにしますか？`)) return;
+  pendingPayoutMemberId = member.id;
+  document.querySelector("#payout-confirm-target").textContent =
+    `${member.name}さん・${yen(amount)}円`;
+  document.querySelector("#payout-confirm-dialog").showModal();
+}
+
+async function completePayout() {
+  const member = state.members.find(candidate =>
+    candidate.id === pendingPayoutMemberId && candidate.role !== "parent"
+  );
+  const parentPanelOpen = document.querySelector("#parent-panel").classList.contains("active");
+  if (!member || (!isParentMode() && !parentPanelOpen)) return;
+  const amount = entriesTotal(unpaidEntriesForMember(member.id));
+  if (!amount) {
+    document.querySelector("#payout-confirm-dialog").close();
+    return;
+  }
   const entry = {
     id: crypto.randomUUID(),
     type: "payout",
@@ -880,10 +918,18 @@ async function payMember(memberId) {
     memberName: member.name,
     date: new Date().toISOString(),
   };
-  await cloudSet(`entries/${entry.id}`, entry);
-  await syncFromCloud();
-  if (parentDialog.open) parentDialog.close();
-  showToast(`${member.name}さんが${yen(amount)}円を受け取りました！`, false);
+  const button = document.querySelector("#confirm-payout");
+  button.disabled = true;
+  try {
+    await cloudSet(`entries/${entry.id}`, entry);
+    document.querySelector("#payout-confirm-dialog").close();
+    pendingPayoutMemberId = null;
+    await syncFromCloud();
+    if (parentDialog.open) parentDialog.close();
+    showToast(`${member.name}さんが${yen(amount)}円を受け取りました！`, false);
+  } finally {
+    button.disabled = false;
+  }
 }
 
 document.querySelector("#payout").addEventListener("click", async () => {
@@ -891,6 +937,7 @@ document.querySelector("#payout").addEventListener("click", async () => {
   if (!member || member.role === "parent") return;
   await payMember(member.id);
 });
+document.querySelector("#confirm-payout").addEventListener("click", completePayout);
 
 function renderRewardAmounts() {
   document.querySelector("#reward-amounts").innerHTML = rewardAmounts.map(amount => `
@@ -998,6 +1045,20 @@ document.querySelector("#save-reward").addEventListener("click", async () => {
 });
 
 document.querySelector("#parent-summary").addEventListener("click", async event => {
+  const calendar = event.target.closest("[data-parent-calendar]");
+  if (calendar) {
+    calendarMemberId = calendar.dataset.parentCalendar;
+    historyMemberId = calendarMemberId;
+    selectedHistoryDate = new Date();
+    calendarViewDate = new Date(
+      selectedHistoryDate.getFullYear(),
+      selectedHistoryDate.getMonth(),
+      1,
+    );
+    renderCalendar();
+    calendarDialog.showModal();
+    return;
+  }
   const detail = event.target.closest("[data-parent-detail]");
   if (detail) {
     renderBreakdown(detail.dataset.parentDetail);

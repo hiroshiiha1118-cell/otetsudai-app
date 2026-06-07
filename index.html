@@ -536,6 +536,16 @@
       box-shadow: 0 5px 16px rgba(95,67,47,.07);
     }
     .parent-child-head { display: flex; justify-content: space-between; align-items: center; font-weight: 900; }
+    .parent-child-name {
+      padding: 5px 8px;
+      border: 0;
+      border-radius: 10px;
+      background: #edf4fc;
+      color: var(--ink);
+      font: inherit;
+      cursor: pointer;
+    }
+    .parent-child-name::after { content: " 📅"; font-size: 11px; }
     .parent-child-balance { color: var(--orange-dark); font-size: 22px; }
     .parent-child-meta { margin: 4px 0 12px; color: var(--muted); font-size: 11px; }
     .parent-card-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -878,7 +888,7 @@
   <dialog id="calendar-dialog">
     <div class="modal">
       <div class="modal-head">
-        <h2>記録を見る日を選ぶ</h2>
+        <h2 id="calendar-dialog-title">記録を見る日を選ぶ</h2>
         <button class="close" type="button" data-close="calendar-dialog" aria-label="閉じる">×</button>
       </div>
       <div class="calendar-head">
@@ -977,6 +987,23 @@
       <div class="confirm-actions">
         <button class="danger" id="confirm-entry-delete" type="button">削除する</button>
         <button class="secondary" type="button" data-close="delete-entry-dialog">削除しない</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="payout-confirm-dialog">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>支払い済みにしますか？</h2>
+        <button class="close" type="button" data-close="payout-confirm-dialog" aria-label="閉じる">×</button>
+      </div>
+      <p class="confirm-copy">
+        支払い済みにすると、現在の残高は0円になります。
+        <strong class="delete-confirm-target" id="payout-confirm-target"></strong>
+      </p>
+      <div class="confirm-actions">
+        <button class="danger" id="confirm-payout" type="button">支払い済みにする</button>
+        <button class="secondary" type="button" data-close="payout-confirm-dialog">まだ支払わない</button>
       </div>
     </div>
   </dialog>
