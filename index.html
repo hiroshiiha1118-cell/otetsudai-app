@@ -549,6 +549,11 @@
     }
     .manage-detail { background: #eee8e3; }
     .manage-payout { background: #ffe9e4; color: #c7452d; }
+    .manage-reward {
+      grid-column: 1 / -1;
+      background: #fff2c9;
+      color: #8a5b00;
+    }
     .parent-member-list { display: grid; gap: 8px; margin: 10px 0 15px; }
     .parent-member-row {
       display: flex;
@@ -660,6 +665,57 @@
     .adjust-option.minus { background: #fff8f5; color: #c7452d; }
     .adjust-option.plus { background: #f3fbf5; color: #287451; }
     .adjust-reasons { grid-template-columns: 1fr; }
+    .reward-target {
+      margin: -4px 0 16px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
+      text-align: center;
+    }
+    .reward-amounts {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 9px;
+      margin-bottom: 17px;
+    }
+    .reward-amount {
+      min-height: 48px;
+      border: 1px solid #f0d79a;
+      border-radius: 14px;
+      background: #fffaf0;
+      color: #8a5b00;
+      font-weight: 900;
+      cursor: pointer;
+    }
+    .reward-amount.selected {
+      border-color: #e2a81c;
+      background: #ffe9a7;
+      box-shadow: 0 0 0 2px rgba(226,168,28,.18);
+    }
+    .reward-reason {
+      width: 100%;
+      min-height: 100px;
+      margin-bottom: 6px;
+      padding: 13px 14px;
+      resize: vertical;
+      border: 2px solid var(--line);
+      border-radius: 15px;
+      outline: none;
+      font: inherit;
+      line-height: 1.6;
+    }
+    .reward-reason:focus { border-color: #e2a81c; }
+    .reward-note {
+      display: block;
+      margin-top: 5px;
+      padding: 4px 7px;
+      border-radius: 8px;
+      background: #fff5d9;
+      color: #8a5b00;
+      font-size: 10px;
+      font-weight: 900;
+      line-height: 1.45;
+    }
     .confirm-copy {
       margin: 4px 0 20px;
       color: var(--muted);
@@ -726,7 +782,7 @@
     <section class="balance-card" id="child-balance-card" aria-live="polite">
       <p class="balance-label" id="balance-label">いま たまっているお金</p>
       <p class="balance"><span id="balance">0</span><small>円</small></p>
-      <p class="balance-meta"><span id="count">0</span>回のおてつだい、ありがとう！</p>
+      <p class="balance-meta"><span id="count">0</span>件のがんばり、ありがとう！</p>
       <button class="breakdown-button" id="open-breakdown" type="button">家族みんなの内訳を見る ›</button>
     </section>
 
@@ -873,6 +929,22 @@
         <p class="adjust-question">理由を選んでください</p>
         <div class="adjust-options adjust-reasons" id="adjustment-reasons"></div>
       </section>
+    </div>
+  </dialog>
+
+  <dialog id="reward-dialog">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>🎁 特別ごほうび</h2>
+        <button class="close" type="button" data-close="reward-dialog" aria-label="閉じる">×</button>
+      </div>
+      <p class="reward-target" id="reward-target"></p>
+      <p class="adjust-question">ごほうびの金額を選んでください</p>
+      <div class="reward-amounts" id="reward-amounts"></div>
+      <label class="setting-title" for="reward-reason">ごほうびの理由</label>
+      <textarea class="reward-reason" id="reward-reason" maxlength="100" placeholder="例：テストで100点を取った、親のお手伝いをしてくれた"></textarea>
+      <p class="error" id="reward-error"></p>
+      <button class="primary" id="save-reward" type="button">ごほうびを追加する</button>
     </div>
   </dialog>
 

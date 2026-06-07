@@ -55,6 +55,8 @@ let breakdownLongPressStart = null;
 let adjustmentEntryId = null;
 let adjustmentSign = null;
 let adjustmentAmount = null;
+let rewardMemberId = null;
+let rewardAmount = null;
 
 const yen = value => new Intl.NumberFormat("ja-JP").format(value);
 const activeMember = () => state.members.find(member => member.id === activeMemberId);
@@ -67,6 +69,13 @@ const entriesTotal = entries => Math.max(
   entries.reduce((sum, entry) => sum + entryTotal(entry), 0),
 );
 const signedYen = value => `${value > 0 ? "+" : ""}${yen(value)}円`;
+const escapeHtml = value => String(value)
+  .replaceAll("&", "&amp;")
+  .replaceAll("<", "&lt;")
+  .replaceAll(">", "&gt;")
+  .replaceAll('"', "&quot;")
+  .replaceAll("'", "&#039;");
+const rewardAmounts = [10, 20, 30, 50, 100, 200, 300, 500, 1000];
 
 const adjustmentAmounts = {
   minus: [10, 20, 30, 50, 100, 150, 200],
@@ -134,7 +143,7 @@ function unpaidEntriesForMember(memberId) {
   const current = lastPayout < 0
     ? memberEntries
     : memberEntries.slice(memberEntries.length - lastPayout);
-  return current.filter(entry => entry.type === "chore");
+  return current.filter(entry => entry.type === "chore" || entry.type === "bonus");
 }
 
 function currentEntries() {
@@ -267,6 +276,18 @@ function renderHistory() {
           <span class="history-value">-${yen(entry.amount)}円</span>
         </div>`;
     }
+    if (entry.type === "bonus") {
+      return `
+        <div class="history-item">
+          <span class="history-dot"></span>
+          <span class="history-main">
+            <span class="history-name"><span class="member-tag">${memberName}</span>🎁 特別ごほうび</span>
+            <span class="history-date">${formatDate(entry.date, true)}</span>
+            <span class="reward-note">${escapeHtml(entry.reason)}</span>
+          </span>
+          <span class="history-value">+${yen(entry.price)}円</span>
+        </div>`;
+    }
     const adjustment = entryAdjustment(entry);
     const adjustmentNote = adjustment
       ? `<span class="adjustment-note ${adjustment < 0 ? "minus" : "plus"}">親からの調整 ${signedYen(adjustment)}：${entry.adjustment.reason}</span>`
@@ -338,6 +359,18 @@ function renderBreakdown(onlyMemberId = null) {
     const total = entriesTotal(entries);
     const rows = entries.length
       ? [...entries].reverse().map(entry => {
+        if (entry.type === "bonus") {
+          return `
+            <div class="breakdown-row">
+              <span class="breakdown-chore">
+                🎁 特別ごほうび
+                <span class="breakdown-date">${formatDate(entry.date, true)}</span>
+                <span class="reward-note">${escapeHtml(entry.reason)}</span>
+              </span>
+              <span class="breakdown-price">+${yen(entry.price)}円</span>
+            </div>
+          `;
+        }
         const adjustment = entryAdjustment(entry);
         const adjustmentNote = adjustment
           ? `<span class="adjustment-note ${adjustment < 0 ? "minus" : "plus"}">${signedYen(adjustment)}：${entry.adjustment.reason}</span>`
@@ -385,10 +418,11 @@ function renderParentDashboard() {
           <span>👤 ${member.name}</span>
           <span class="parent-child-balance">${yen(total)}円</span>
         </div>
-        <p class="parent-child-meta">未払いのお手伝い ${entries.length}件</p>
+        <p class="parent-child-meta">未払いの記録 ${entries.length}件</p>
         <div class="parent-card-actions">
           <button class="manage-detail" type="button" data-parent-detail="${member.id}">内訳を見る</button>
           <button class="manage-payout" type="button" data-parent-payout="${member.id}" ${total ? "" : "disabled"}>支払い済みにする</button>
+          <button class="manage-reward" type="button" data-parent-reward="${member.id}">🎁 特別ごほうび</button>
         </div>
       </section>
     `;
@@ -806,11 +840,83 @@ document.querySelector("#payout").addEventListener("click", async () => {
   await payMember(member.id);
 });
 
+function openReward(memberId) {
+  if (!isParentMode()) return;
+  const member = state.members.find(candidate => candidate.id === memberId && candidate.role !== "parent");
+  if (!member) return;
+  rewardMemberId = member.id;
+  rewardAmount = null;
+  document.querySelector("#reward-target").textContent = `${member.name}さんへの特別ごほうび`;
+  document.querySelector("#reward-reason").value = "";
+  document.querySelector("#reward-error").textContent = "";
+  document.querySelector("#reward-amounts").innerHTML = rewardAmounts.map(amount => `
+    <button class="reward-amount" type="button" data-reward-amount="${amount}">
+      ${yen(amount)}円
+    </button>
+  `).join("");
+  document.querySelector("#reward-dialog").showModal();
+}
+
+document.querySelector("#reward-amounts").addEventListener("click", event => {
+  const button = event.target.closest("[data-reward-amount]");
+  if (!button) return;
+  rewardAmount = Number(button.dataset.rewardAmount);
+  document.querySelectorAll("[data-reward-amount]").forEach(option => {
+    option.classList.toggle("selected", option === button);
+  });
+  document.querySelector("#reward-error").textContent = "";
+});
+
+document.querySelector("#save-reward").addEventListener("click", async () => {
+  const member = state.members.find(candidate =>
+    candidate.id === rewardMemberId && candidate.role !== "parent"
+  );
+  const reason = document.querySelector("#reward-reason").value.trim();
+  const error = document.querySelector("#reward-error");
+  if (!member || !isParentMode()) return;
+  if (!rewardAmount) {
+    error.textContent = "金額を選んでください";
+    return;
+  }
+  if (!reason) {
+    error.textContent = "ごほうびの理由を入力してください";
+    return;
+  }
+  const entry = {
+    id: crypto.randomUUID(),
+    type: "bonus",
+    name: "特別ごほうび",
+    price: rewardAmount,
+    reason,
+    memberId: member.id,
+    memberName: member.name,
+    createdBy: activeMember()?.name || "親",
+    date: new Date().toISOString(),
+  };
+  const button = document.querySelector("#save-reward");
+  button.disabled = true;
+  try {
+    await cloudSet(`entries/${entry.id}`, entry);
+    document.querySelector("#reward-dialog").close();
+    await syncFromCloud();
+    showToast(`${member.name}さんに${yen(entry.price)}円の特別ごほうびを追加しました`, false);
+  } catch {
+    error.textContent = "保存できませんでした。通信を確認してください";
+  } finally {
+    button.disabled = false;
+  }
+});
+
 document.querySelector("#parent-summary").addEventListener("click", async event => {
   const detail = event.target.closest("[data-parent-detail]");
   if (detail) {
     renderBreakdown(detail.dataset.parentDetail);
     document.querySelector("#breakdown-dialog").showModal();
+    return;
+  }
+  const reward = event.target.closest("[data-parent-reward]");
+  if (reward) {
+    openReward(reward.dataset.parentReward);
     return;
   }
   const payout = event.target.closest("[data-parent-payout]");
