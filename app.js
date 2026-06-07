@@ -57,6 +57,8 @@ let adjustmentSign = null;
 let adjustmentAmount = null;
 let rewardMemberId = null;
 let rewardAmount = null;
+let rewardEntryId = null;
+let managedEntryId = null;
 
 const yen = value => new Intl.NumberFormat("ja-JP").format(value);
 const activeMember = () => state.members.find(member => member.id === activeMemberId);
@@ -345,7 +347,7 @@ function renderBreakdown(onlyMemberId = null) {
   const container = document.querySelector("#breakdown-list");
   const adjustable = Boolean(onlyMemberId && isParentMode());
   document.querySelector("#breakdown-note").textContent = adjustable
-    ? "お手伝い項目を長押しすると、ポイントの加算・減算と理由を登録できます。"
+    ? "記録を長押しすると、ポイント変更や削除ができます。"
     : "まだ支払われていないお手伝いを、子どもごとに表示しています。";
   const children = state.members.filter(member =>
     member.role !== "parent" && (!onlyMemberId || member.id === onlyMemberId)
@@ -361,7 +363,7 @@ function renderBreakdown(onlyMemberId = null) {
       ? [...entries].reverse().map(entry => {
         if (entry.type === "bonus") {
           return `
-            <div class="breakdown-row">
+            <div class="breakdown-row ${adjustable ? "adjustable" : ""}" ${adjustable ? `data-manage-entry="${entry.id}"` : ""}>
               <span class="breakdown-chore">
                 🎁 特別ごほうび
                 <span class="breakdown-date">${formatDate(entry.date, true)}</span>
@@ -376,7 +378,7 @@ function renderBreakdown(onlyMemberId = null) {
           ? `<span class="adjustment-note ${adjustment < 0 ? "minus" : "plus"}">${signedYen(adjustment)}：${entry.adjustment.reason}</span>`
           : "";
         return `
-          <div class="breakdown-row ${adjustable ? "adjustable" : ""}" ${adjustable ? `data-adjust-entry="${entry.id}"` : ""}>
+          <div class="breakdown-row ${adjustable ? "adjustable" : ""}" ${adjustable ? `data-manage-entry="${entry.id}" data-adjust-entry="${entry.id}"` : ""}>
             <span class="breakdown-chore">
               ${entry.name}
               <span class="breakdown-date">${formatDate(entry.date, true)}</span>
@@ -661,6 +663,22 @@ function openAdjustment(entryId) {
   navigator.vibrate?.(35);
 }
 
+function openEntryAction(entryId) {
+  if (!isParentMode()) return;
+  const entry = state.entries.find(candidate =>
+    candidate.id === entryId && (candidate.type === "chore" || candidate.type === "bonus")
+  );
+  if (!entry) return;
+  managedEntryId = entry.id;
+  const isBonus = entry.type === "bonus";
+  document.querySelector("#entry-action-target").textContent =
+    `${entry.memberName || "子ども"}・${isBonus ? "特別ごほうび" : entry.name}（${signedYen(entryTotal(entry))}）`;
+  document.querySelector("#entry-action-edit").textContent =
+    isBonus ? "ポイント変更" : "ポイント調整";
+  document.querySelector("#entry-action-dialog").showModal();
+  navigator.vibrate?.(35);
+}
+
 function clearBreakdownLongPress() {
   clearTimeout(breakdownLongPressTimer);
   breakdownLongPressTimer = null;
@@ -669,13 +687,13 @@ function clearBreakdownLongPress() {
 
 const breakdownList = document.querySelector("#breakdown-list");
 breakdownList.addEventListener("pointerdown", event => {
-  const row = event.target.closest("[data-adjust-entry]");
+  const row = event.target.closest("[data-manage-entry]");
   if (!row || !isParentMode()) return;
   clearBreakdownLongPress();
   breakdownLongPressStart = { x: event.clientX, y: event.clientY };
   breakdownLongPressTimer = setTimeout(() => {
     breakdownLongPressTimer = null;
-    openAdjustment(row.dataset.adjustEntry);
+    openEntryAction(row.dataset.manageEntry);
   }, 650);
 });
 breakdownList.addEventListener("pointerup", clearBreakdownLongPress);
@@ -690,7 +708,41 @@ breakdownList.addEventListener("pointermove", event => {
   }
 });
 breakdownList.addEventListener("contextmenu", event => {
-  if (event.target.closest("[data-adjust-entry]")) event.preventDefault();
+  if (event.target.closest("[data-manage-entry]")) event.preventDefault();
+});
+
+document.querySelector("#entry-action-edit").addEventListener("click", () => {
+  const entry = state.entries.find(candidate => candidate.id === managedEntryId);
+  if (!entry || !isParentMode()) return;
+  document.querySelector("#entry-action-dialog").close();
+  if (entry.type === "bonus") openRewardEdit(entry.id);
+  else openAdjustment(entry.id);
+});
+
+document.querySelector("#entry-action-delete").addEventListener("click", () => {
+  const entry = state.entries.find(candidate => candidate.id === managedEntryId);
+  if (!entry || !isParentMode()) return;
+  document.querySelector("#entry-action-dialog").close();
+  document.querySelector("#delete-entry-target").textContent =
+    `${entry.type === "bonus" ? "🎁 特別ごほうび" : entry.name} ${signedYen(entryTotal(entry))}`;
+  document.querySelector("#delete-entry-dialog").showModal();
+});
+
+document.querySelector("#confirm-entry-delete").addEventListener("click", async () => {
+  const entry = state.entries.find(candidate => candidate.id === managedEntryId);
+  if (!entry || !isParentMode()) return;
+  const button = document.querySelector("#confirm-entry-delete");
+  button.disabled = true;
+  try {
+    await cloudRemove(`entries/${entry.id}`);
+    document.querySelector("#delete-entry-dialog").close();
+    managedEntryId = null;
+    await syncFromCloud();
+    renderBreakdown(breakdownMemberId);
+    showToast(`${entry.type === "bonus" ? "特別ごほうび" : entry.name}を削除しました`, false);
+  } finally {
+    button.disabled = false;
+  }
 });
 
 document.querySelector("#adjust-step-sign").addEventListener("click", event => {
@@ -840,20 +892,44 @@ document.querySelector("#payout").addEventListener("click", async () => {
   await payMember(member.id);
 });
 
+function renderRewardAmounts() {
+  document.querySelector("#reward-amounts").innerHTML = rewardAmounts.map(amount => `
+    <button class="reward-amount ${rewardAmount === amount ? "selected" : ""}" type="button" data-reward-amount="${amount}">
+      ${yen(amount)}円
+    </button>
+  `).join("");
+}
+
 function openReward(memberId) {
   if (!isParentMode()) return;
   const member = state.members.find(candidate => candidate.id === memberId && candidate.role !== "parent");
   if (!member) return;
   rewardMemberId = member.id;
+  rewardEntryId = null;
   rewardAmount = null;
   document.querySelector("#reward-target").textContent = `${member.name}さんへの特別ごほうび`;
   document.querySelector("#reward-reason").value = "";
+  document.querySelector("#reward-reason-wrap").hidden = false;
   document.querySelector("#reward-error").textContent = "";
-  document.querySelector("#reward-amounts").innerHTML = rewardAmounts.map(amount => `
-    <button class="reward-amount" type="button" data-reward-amount="${amount}">
-      ${yen(amount)}円
-    </button>
-  `).join("");
+  document.querySelector("#save-reward").textContent = "ごほうびを追加する";
+  renderRewardAmounts();
+  document.querySelector("#reward-dialog").showModal();
+}
+
+function openRewardEdit(entryId) {
+  if (!isParentMode()) return;
+  const entry = state.entries.find(candidate => candidate.id === entryId && candidate.type === "bonus");
+  if (!entry) return;
+  rewardMemberId = entry.memberId;
+  rewardEntryId = entry.id;
+  rewardAmount = Number(entry.price);
+  document.querySelector("#reward-target").textContent =
+    `${entry.memberName || "子ども"}さんの特別ごほうび（現在 ${yen(entry.price)}円）`;
+  document.querySelector("#reward-reason").value = entry.reason || "";
+  document.querySelector("#reward-reason-wrap").hidden = true;
+  document.querySelector("#reward-error").textContent = "";
+  document.querySelector("#save-reward").textContent = "金額を変更する";
+  renderRewardAmounts();
   document.querySelector("#reward-dialog").showModal();
 }
 
@@ -878,20 +954,28 @@ document.querySelector("#save-reward").addEventListener("click", async () => {
     error.textContent = "金額を選んでください";
     return;
   }
-  if (!reason) {
+  if (!rewardEntryId && !reason) {
     error.textContent = "ごほうびの理由を入力してください";
     return;
   }
+  const editingEntry = rewardEntryId
+    ? state.entries.find(candidate => candidate.id === rewardEntryId && candidate.type === "bonus")
+    : null;
+  if (rewardEntryId && !editingEntry) return;
   const entry = {
-    id: crypto.randomUUID(),
+    id: editingEntry?.id || crypto.randomUUID(),
     type: "bonus",
     name: "特別ごほうび",
     price: rewardAmount,
-    reason,
+    reason: editingEntry?.reason || reason,
     memberId: member.id,
     memberName: member.name,
-    createdBy: activeMember()?.name || "親",
-    date: new Date().toISOString(),
+    createdBy: editingEntry?.createdBy || activeMember()?.name || "親",
+    date: editingEntry?.date || new Date().toISOString(),
+    ...(editingEntry ? {
+      updatedAt: new Date().toISOString(),
+      updatedBy: activeMember()?.name || "親",
+    } : {}),
   };
   const button = document.querySelector("#save-reward");
   button.disabled = true;
@@ -899,7 +983,13 @@ document.querySelector("#save-reward").addEventListener("click", async () => {
     await cloudSet(`entries/${entry.id}`, entry);
     document.querySelector("#reward-dialog").close();
     await syncFromCloud();
-    showToast(`${member.name}さんに${yen(entry.price)}円の特別ごほうびを追加しました`, false);
+    renderBreakdown(breakdownMemberId);
+    showToast(
+      editingEntry
+        ? `特別ごほうびを${yen(entry.price)}円に変更しました`
+        : `${member.name}さんに${yen(entry.price)}円の特別ごほうびを追加しました`,
+      false,
+    );
   } catch {
     error.textContent = "保存できませんでした。通信を確認してください";
   } finally {

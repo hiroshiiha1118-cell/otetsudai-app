@@ -665,6 +665,24 @@
     .adjust-option.minus { background: #fff8f5; color: #c7452d; }
     .adjust-option.plus { background: #f3fbf5; color: #287451; }
     .adjust-reasons { grid-template-columns: 1fr; }
+    .entry-action-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .entry-action-grid button {
+      min-height: 62px;
+      margin: 0;
+      font-size: 14px;
+    }
+    .entry-action-edit { background: #eee8e3; color: var(--ink); }
+    .delete-confirm-target {
+      display: block;
+      margin-top: 9px;
+      color: var(--ink);
+      font-size: 19px;
+      font-weight: 900;
+    }
     .reward-target {
       margin: -4px 0 16px;
       color: var(--muted);
@@ -932,6 +950,37 @@
     </div>
   </dialog>
 
+  <dialog id="entry-action-dialog">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>この記録をどうする？</h2>
+        <button class="close" type="button" data-close="entry-action-dialog" aria-label="閉じる">×</button>
+      </div>
+      <p class="adjust-target" id="entry-action-target"></p>
+      <div class="entry-action-grid">
+        <button class="secondary entry-action-edit" id="entry-action-edit" type="button">ポイント調整</button>
+        <button class="danger" id="entry-action-delete" type="button">削除する</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="delete-entry-dialog">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>本当に削除しますか？</h2>
+        <button class="close" type="button" data-close="delete-entry-dialog" aria-label="閉じる">×</button>
+      </div>
+      <p class="confirm-copy">
+        削除すると元に戻せません。
+        <strong class="delete-confirm-target" id="delete-entry-target"></strong>
+      </p>
+      <div class="confirm-actions">
+        <button class="danger" id="confirm-entry-delete" type="button">削除する</button>
+        <button class="secondary" type="button" data-close="delete-entry-dialog">削除しない</button>
+      </div>
+    </div>
+  </dialog>
+
   <dialog id="reward-dialog">
     <div class="modal">
       <div class="modal-head">
@@ -941,8 +990,10 @@
       <p class="reward-target" id="reward-target"></p>
       <p class="adjust-question">ごほうびの金額を選んでください</p>
       <div class="reward-amounts" id="reward-amounts"></div>
-      <label class="setting-title" for="reward-reason">ごほうびの理由</label>
-      <textarea class="reward-reason" id="reward-reason" maxlength="100" placeholder="例：テストで100点を取った、親のお手伝いをしてくれた"></textarea>
+      <div id="reward-reason-wrap">
+        <label class="setting-title" for="reward-reason">ごほうびの理由</label>
+        <textarea class="reward-reason" id="reward-reason" maxlength="100" placeholder="例：テストで100点を取った、親のお手伝いをしてくれた"></textarea>
+      </div>
       <p class="error" id="reward-error"></p>
       <button class="primary" id="save-reward" type="button">ごほうびを追加する</button>
     </div>
