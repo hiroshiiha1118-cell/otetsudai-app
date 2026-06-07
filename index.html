@@ -382,6 +382,12 @@
       box-shadow: 0 0 0 5px rgba(101,189,138,.13);
     }
     .history-item.payout .history-dot { background: var(--orange); box-shadow: 0 0 0 5px rgba(255,116,82,.13); }
+    .history-item.parent-manageable {
+      cursor: pointer;
+      touch-action: pan-y;
+      user-select: none;
+      -webkit-user-select: none;
+    }
     .history-main { min-width: 0; flex: 1; }
     .history-name { display: block; overflow: hidden; font-size: 13px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
     .history-date { display: block; margin-top: 2px; color: var(--muted); font-size: 10px; }

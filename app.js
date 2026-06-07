@@ -279,12 +279,13 @@ function renderHistory() {
   history.innerHTML = selectedEntries.map(entry => {
     const memberName = memberMap[entry.memberId]?.name || entry.memberName || "名前なし";
     if (entry.type === "payout") {
+      const parentCanManage = isParentMode() && historyMemberId === entry.memberId;
       return `
-        <div class="history-item payout">
+        <div class="history-item payout ${parentCanManage ? "parent-manageable" : ""}" ${parentCanManage ? `data-parent-history-entry="${entry.id}"` : ""}>
           <span class="history-dot"></span>
           <span class="history-main">
             <span class="history-name"><span class="member-tag">${memberName}</span>おこづかいを受け取りました</span>
-            <span class="history-date">${formatDate(entry.date, true)}</span>
+            <span class="history-date">${formatDate(entry.date, true)}${parentCanManage ? "・長押しで削除" : ""}</span>
           </span>
           <span class="history-value">-${yen(entry.amount)}円</span>
         </div>`;
@@ -570,11 +571,17 @@ const clearLongPress = () => {
 };
 
 historyElement.addEventListener("pointerdown", event => {
-  const item = event.target.closest("[data-entry-id]");
+  const parentItem = event.target.closest("[data-parent-history-entry]");
+  const item = parentItem || event.target.closest("[data-entry-id]");
   if (!item) return;
   clearLongPress();
   longPressStart = { x: event.clientX, y: event.clientY };
   longPressTimer = setTimeout(() => {
+    if (parentItem) {
+      longPressTimer = null;
+      openEntryAction(parentItem.dataset.parentHistoryEntry);
+      return;
+    }
     const entry = state.entries.find(candidate => candidate.id === item.dataset.entryId);
     if (!entry || entry.type !== "chore") return;
     longPressTimer = null;
@@ -595,7 +602,7 @@ historyElement.addEventListener("pointermove", event => {
   }
 });
 historyElement.addEventListener("contextmenu", event => {
-  if (event.target.closest("[data-entry-id]")) event.preventDefault();
+  if (event.target.closest("[data-entry-id], [data-parent-history-entry]")) event.preventDefault();
 });
 historyElement.addEventListener("click", event => {
   if (!selectionMode || suppressHistoryClick) return;
@@ -686,15 +693,21 @@ function openAdjustment(entryId) {
 function openEntryAction(entryId) {
   if (!isParentMode()) return;
   const entry = state.entries.find(candidate =>
-    candidate.id === entryId && (candidate.type === "chore" || candidate.type === "bonus")
+    candidate.id === entryId &&
+    (candidate.type === "chore" || candidate.type === "bonus" || candidate.type === "payout")
   );
   if (!entry) return;
   managedEntryId = entry.id;
   const isBonus = entry.type === "bonus";
+  const isPayout = entry.type === "payout";
+  const editButton = document.querySelector("#entry-action-edit");
+  const deleteButton = document.querySelector("#entry-action-delete");
   document.querySelector("#entry-action-target").textContent =
-    `${entry.memberName || "子ども"}・${isBonus ? "特別ごほうび" : entry.name}（${signedYen(entryTotal(entry))}）`;
-  document.querySelector("#entry-action-edit").textContent =
+    `${entry.memberName || "子ども"}・${isPayout ? "支払い済み記録" : isBonus ? "特別ごほうび" : entry.name}（${isPayout ? `-${yen(entry.amount)}円` : signedYen(entryTotal(entry))}）`;
+  editButton.textContent =
     isBonus ? "ポイント変更" : "ポイント調整";
+  editButton.hidden = isPayout;
+  deleteButton.style.gridColumn = isPayout ? "1 / -1" : "";
   document.querySelector("#entry-action-dialog").showModal();
   navigator.vibrate?.(35);
 }
@@ -744,7 +757,9 @@ document.querySelector("#entry-action-delete").addEventListener("click", () => {
   if (!entry || !isParentMode()) return;
   document.querySelector("#entry-action-dialog").close();
   document.querySelector("#delete-entry-target").textContent =
-    `${entry.type === "bonus" ? "🎁 特別ごほうび" : entry.name} ${signedYen(entryTotal(entry))}`;
+    entry.type === "payout"
+      ? `支払い済み記録 -${yen(entry.amount)}円`
+      : `${entry.type === "bonus" ? "🎁 特別ごほうび" : entry.name} ${signedYen(entryTotal(entry))}`;
   document.querySelector("#delete-entry-dialog").showModal();
 });
 
@@ -759,7 +774,10 @@ document.querySelector("#confirm-entry-delete").addEventListener("click", async 
     managedEntryId = null;
     await syncFromCloud();
     renderBreakdown(breakdownMemberId);
-    showToast(`${entry.type === "bonus" ? "特別ごほうび" : entry.name}を削除しました`, false);
+    showToast(
+      `${entry.type === "payout" ? "支払い済み記録" : entry.type === "bonus" ? "特別ごほうび" : entry.name}を削除しました`,
+      false,
+    );
   } finally {
     button.disabled = false;
   }
