@@ -62,6 +62,10 @@ let managedEntryId = null;
 let calendarMemberId = null;
 let historyMemberId = null;
 let pendingPayoutMemberId = null;
+let pendingPayoutEntryIds = null;
+let breakdownSelectionMode = false;
+let selectedBreakdownEntryIds = new Set();
+let suppressBreakdownClick = false;
 
 const yen = value => new Intl.NumberFormat("ja-JP").format(value);
 const activeMember = () => state.members.find(member => member.id === activeMemberId);
@@ -144,11 +148,23 @@ function unpaidEntriesForMember(memberId) {
   const memberEntries = state.entries
     .filter(entry => entry.memberId === memberId)
     .sort((first, second) => new Date(first.date) - new Date(second.date));
-  const lastPayout = [...memberEntries].reverse().findIndex(entry => entry.type === "payout");
-  const current = lastPayout < 0
-    ? memberEntries
-    : memberEntries.slice(memberEntries.length - lastPayout);
-  return current.filter(entry => entry.type === "chore" || entry.type === "bonus");
+  const paidEntryIds = new Set();
+  for (const entry of memberEntries) {
+    if (entry.type !== "payout") continue;
+    if (Array.isArray(entry.paidEntryIds)) {
+      entry.paidEntryIds.forEach(id => paidEntryIds.add(id));
+      continue;
+    }
+    memberEntries
+      .filter(candidate =>
+        (candidate.type === "chore" || candidate.type === "bonus") &&
+        new Date(candidate.date) <= new Date(entry.date)
+      )
+      .forEach(candidate => paidEntryIds.add(candidate.id));
+  }
+  return memberEntries.filter(entry =>
+    (entry.type === "chore" || entry.type === "bonus") && !paidEntryIds.has(entry.id)
+  );
 }
 
 function currentEntries() {
@@ -362,11 +378,16 @@ function renderCalendar() {
 }
 
 function renderBreakdown(onlyMemberId = null) {
+  if (onlyMemberId !== breakdownMemberId) {
+    breakdownSelectionMode = false;
+    selectedBreakdownEntryIds.clear();
+  }
   breakdownMemberId = onlyMemberId;
   const container = document.querySelector("#breakdown-list");
   const adjustable = Boolean(onlyMemberId && isParentMode());
+  container.classList.toggle("selection-mode", breakdownSelectionMode);
   document.querySelector("#breakdown-note").textContent = adjustable
-    ? "記録を長押しすると、ポイント変更や削除ができます。"
+    ? "長押しで複数選択できます。タップで個別操作もできます。"
     : "まだ支払われていないお手伝いを、子どもごとに表示しています。";
   const children = state.members.filter(member =>
     member.role !== "parent" && (!onlyMemberId || member.id === onlyMemberId)
@@ -377,12 +398,16 @@ function renderBreakdown(onlyMemberId = null) {
   }
   container.innerHTML = children.map(member => {
     const entries = unpaidEntriesForMember(member.id);
+    selectedBreakdownEntryIds = new Set([...selectedBreakdownEntryIds].filter(id =>
+      entries.some(entry => entry.id === id)
+    ));
     const total = entriesTotal(entries);
     const rows = entries.length
       ? [...entries].reverse().map(entry => {
         if (entry.type === "bonus") {
           return `
-            <div class="breakdown-row ${adjustable ? "adjustable" : ""}" ${adjustable ? `data-manage-entry="${entry.id}"` : ""}>
+            <div class="breakdown-row ${adjustable ? "adjustable" : ""} ${selectedBreakdownEntryIds.has(entry.id) ? "selected" : ""}" ${adjustable ? `data-manage-entry="${entry.id}" data-breakdown-entry="${entry.id}"` : ""}>
+              <span class="breakdown-check">${selectedBreakdownEntryIds.has(entry.id) ? "✓" : ""}</span>
               <span class="breakdown-chore">
                 🎁 特別ごほうび
                 <span class="breakdown-date">${formatDate(entry.date, true)}</span>
@@ -397,7 +422,8 @@ function renderBreakdown(onlyMemberId = null) {
           ? `<span class="adjustment-note ${adjustment < 0 ? "minus" : "plus"}">${signedYen(adjustment)}：${entry.adjustment.reason}</span>`
           : "";
         return `
-          <div class="breakdown-row ${adjustable ? "adjustable" : ""}" ${adjustable ? `data-manage-entry="${entry.id}" data-adjust-entry="${entry.id}"` : ""}>
+          <div class="breakdown-row ${adjustable ? "adjustable" : ""} ${selectedBreakdownEntryIds.has(entry.id) ? "selected" : ""}" ${adjustable ? `data-manage-entry="${entry.id}" data-breakdown-entry="${entry.id}" data-adjust-entry="${entry.id}"` : ""}>
+            <span class="breakdown-check">${selectedBreakdownEntryIds.has(entry.id) ? "✓" : ""}</span>
             <span class="breakdown-chore">
               ${entry.name}
               <span class="breakdown-date">${formatDate(entry.date, true)}</span>
@@ -421,6 +447,7 @@ function renderBreakdown(onlyMemberId = null) {
       </section>
     `;
   }).join("");
+  updateBreakdownSelectionToolbar();
 }
 
 function renderParentDashboard() {
@@ -712,6 +739,29 @@ function openEntryAction(entryId) {
   navigator.vibrate?.(35);
 }
 
+function selectedBreakdownEntries() {
+  return unpaidEntriesForMember(breakdownMemberId).filter(entry =>
+    selectedBreakdownEntryIds.has(entry.id)
+  );
+}
+
+function updateBreakdownSelectionToolbar() {
+  const toolbar = document.querySelector("#breakdown-selection-toolbar");
+  const selected = selectedBreakdownEntries();
+  const total = entriesTotal(selected);
+  toolbar.classList.toggle("active", breakdownSelectionMode);
+  document.querySelector("#breakdown-selection-count").textContent =
+    `${selected.length}件・${yen(total)}円を選択中`;
+  document.querySelector("#pay-selected-breakdown").disabled = !selected.length || !total;
+}
+
+function cancelBreakdownSelection() {
+  breakdownSelectionMode = false;
+  selectedBreakdownEntryIds.clear();
+  suppressBreakdownClick = false;
+  renderBreakdown(breakdownMemberId);
+}
+
 function clearBreakdownLongPress() {
   clearTimeout(breakdownLongPressTimer);
   breakdownLongPressTimer = null;
@@ -720,13 +770,17 @@ function clearBreakdownLongPress() {
 
 const breakdownList = document.querySelector("#breakdown-list");
 breakdownList.addEventListener("pointerdown", event => {
-  const row = event.target.closest("[data-manage-entry]");
-  if (!row || !isParentMode()) return;
+  if (!breakdownMemberId || !isParentMode()) return;
   clearBreakdownLongPress();
   breakdownLongPressStart = { x: event.clientX, y: event.clientY };
   breakdownLongPressTimer = setTimeout(() => {
     breakdownLongPressTimer = null;
-    openEntryAction(row.dataset.manageEntry);
+    breakdownSelectionMode = true;
+    selectedBreakdownEntryIds.clear();
+    suppressBreakdownClick = true;
+    renderBreakdown(breakdownMemberId);
+    navigator.vibrate?.(35);
+    setTimeout(() => { suppressBreakdownClick = false; }, 400);
   }, 650);
 });
 breakdownList.addEventListener("pointerup", clearBreakdownLongPress);
@@ -742,6 +796,31 @@ breakdownList.addEventListener("pointermove", event => {
 });
 breakdownList.addEventListener("contextmenu", event => {
   if (event.target.closest("[data-manage-entry]")) event.preventDefault();
+});
+breakdownList.addEventListener("click", event => {
+  const row = event.target.closest("[data-breakdown-entry]");
+  if (!row || !isParentMode() || suppressBreakdownClick) return;
+  if (breakdownSelectionMode) {
+    const entryId = row.dataset.breakdownEntry;
+    if (selectedBreakdownEntryIds.has(entryId)) selectedBreakdownEntryIds.delete(entryId);
+    else selectedBreakdownEntryIds.add(entryId);
+    renderBreakdown(breakdownMemberId);
+    return;
+  }
+  openEntryAction(row.dataset.breakdownEntry);
+});
+
+document.querySelector("#cancel-breakdown-selection").addEventListener("click", cancelBreakdownSelection);
+document.querySelector("#pay-selected-breakdown").addEventListener("click", () => {
+  const selected = selectedBreakdownEntries();
+  const member = state.members.find(candidate => candidate.id === breakdownMemberId);
+  const amount = entriesTotal(selected);
+  if (!member || !selected.length || !amount) return;
+  pendingPayoutMemberId = member.id;
+  pendingPayoutEntryIds = selected.map(entry => entry.id);
+  document.querySelector("#payout-confirm-target").textContent =
+    `${member.name}さん・${yen(amount)}円（選択 ${selected.length}件）`;
+  document.querySelector("#payout-confirm-dialog").showModal();
 });
 
 document.querySelector("#entry-action-edit").addEventListener("click", () => {
@@ -912,6 +991,7 @@ async function payMember(memberId) {
     return;
   }
   pendingPayoutMemberId = member.id;
+  pendingPayoutEntryIds = entries.map(entry => entry.id);
   document.querySelector("#payout-confirm-target").textContent =
     `${member.name}さん・${yen(amount)}円`;
   document.querySelector("#payout-confirm-dialog").showModal();
@@ -923,7 +1003,11 @@ async function completePayout() {
   );
   const parentPanelOpen = document.querySelector("#parent-panel").classList.contains("active");
   if (!member || (!isParentMode() && !parentPanelOpen)) return;
-  const amount = entriesTotal(unpaidEntriesForMember(member.id));
+  const unpaidEntries = unpaidEntriesForMember(member.id);
+  const payableEntries = Array.isArray(pendingPayoutEntryIds)
+    ? unpaidEntries.filter(entry => pendingPayoutEntryIds.includes(entry.id))
+    : unpaidEntries;
+  const amount = entriesTotal(payableEntries);
   if (!amount) {
     document.querySelector("#payout-confirm-dialog").close();
     return;
@@ -932,6 +1016,7 @@ async function completePayout() {
     id: crypto.randomUUID(),
     type: "payout",
     amount,
+    paidEntryIds: payableEntries.map(candidate => candidate.id),
     memberId: member.id,
     memberName: member.name,
     date: new Date().toISOString(),
@@ -942,7 +1027,11 @@ async function completePayout() {
     await cloudSet(`entries/${entry.id}`, entry);
     document.querySelector("#payout-confirm-dialog").close();
     pendingPayoutMemberId = null;
+    pendingPayoutEntryIds = null;
+    breakdownSelectionMode = false;
+    selectedBreakdownEntryIds.clear();
     await syncFromCloud();
+    if (document.querySelector("#breakdown-dialog").open) renderBreakdown(breakdownMemberId);
     if (parentDialog.open) parentDialog.close();
     showToast(`${member.name}さんが${yen(amount)}円を受け取りました！`, false);
   } finally {

@@ -615,6 +615,7 @@
       display: grid;
       grid-template-columns: 1fr auto;
       gap: 8px;
+      align-items: center;
       padding: 10px 0;
       border-bottom: 1px solid #f0e7e0;
     }
@@ -626,6 +627,24 @@
       -webkit-user-select: none;
     }
     .breakdown-row.adjustable:active { background: #fff8f5; }
+    .breakdown-check {
+      display: none;
+      place-items: center;
+      width: 24px;
+      height: 24px;
+      border: 2px solid #e3d7cf;
+      border-radius: 8px;
+      background: white;
+      color: white;
+      font-size: 14px;
+      font-weight: 900;
+    }
+    .breakdown-list.selection-mode .breakdown-check { display: grid; }
+    .breakdown-list.selection-mode .breakdown-row { grid-template-columns: auto 1fr auto; }
+    .breakdown-row.selected .breakdown-check {
+      border-color: var(--orange);
+      background: var(--orange);
+    }
     .breakdown-chore { font-size: 13px; font-weight: 800; }
     .breakdown-date { display: block; margin-top: 2px; color: var(--muted); font-size: 10px; }
     .breakdown-price { align-self: center; color: var(--green); font-size: 14px; font-weight: 900; }
@@ -638,6 +657,22 @@
       font-weight: 700;
     }
     .breakdown-empty { padding: 15px; color: var(--muted); font-size: 12px; text-align: center; }
+    .breakdown-selection-toolbar {
+      display: none;
+      margin-bottom: 12px;
+      padding: 13px;
+      border: 1px solid #ffd2c7;
+      border-radius: 18px;
+      background: #fff8f5;
+    }
+    .breakdown-selection-toolbar.active { display: block; }
+    .breakdown-selection-count {
+      display: block;
+      margin-bottom: 10px;
+      font-size: 13px;
+      font-weight: 900;
+      text-align: center;
+    }
     .adjust-step[hidden] { display: none; }
     .adjust-target {
       margin: -4px 0 16px;
@@ -937,6 +972,13 @@
         <button class="close" type="button" data-close="breakdown-dialog" aria-label="閉じる">×</button>
       </div>
       <p class="setup-note" id="breakdown-note">まだ支払われていないお手伝いを、子どもごとに表示しています。</p>
+      <div class="breakdown-selection-toolbar" id="breakdown-selection-toolbar">
+        <span class="breakdown-selection-count" id="breakdown-selection-count">0件・0円を選択中</span>
+        <div class="confirm-actions">
+          <button class="danger" id="pay-selected-breakdown" type="button">選択分を支払い済みにする</button>
+          <button class="secondary" id="cancel-breakdown-selection" type="button">やめる</button>
+        </div>
+      </div>
       <div class="breakdown-list" id="breakdown-list"></div>
     </div>
   </dialog>
