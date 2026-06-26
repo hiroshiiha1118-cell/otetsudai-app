@@ -659,11 +659,15 @@
     .breakdown-empty { padding: 15px; color: var(--muted); font-size: 12px; text-align: center; }
     .breakdown-selection-toolbar {
       display: none;
+      position: sticky;
+      top: -1px;
+      z-index: 5;
       margin-bottom: 12px;
       padding: 13px;
       border: 1px solid #ffd2c7;
       border-radius: 18px;
       background: #fff8f5;
+      box-shadow: 0 8px 18px rgba(95,67,47,.12);
     }
     .breakdown-selection-toolbar.active { display: block; }
     .breakdown-selection-count {
