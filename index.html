@@ -668,8 +668,16 @@
     .breakdown-selection-toolbar.active { display: block; }
     .breakdown-selection-count {
       display: block;
-      margin-bottom: 10px;
+      margin-bottom: 6px;
       font-size: 13px;
+      font-weight: 900;
+      text-align: center;
+    }
+    .breakdown-selection-total {
+      display: block;
+      margin-bottom: 12px;
+      color: var(--orange-dark);
+      font-size: 22px;
       font-weight: 900;
       text-align: center;
     }
@@ -973,7 +981,8 @@
       </div>
       <p class="setup-note" id="breakdown-note">まだ支払われていないお手伝いを、子どもごとに表示しています。</p>
       <div class="breakdown-selection-toolbar" id="breakdown-selection-toolbar">
-        <span class="breakdown-selection-count" id="breakdown-selection-count">0件・0円を選択中</span>
+        <span class="breakdown-selection-count" id="breakdown-selection-count">0件選択中</span>
+        <span class="breakdown-selection-total" id="breakdown-selection-total">合計 0円</span>
         <div class="confirm-actions">
           <button class="danger" id="pay-selected-breakdown" type="button">選択分を支払い済みにする</button>
           <button class="secondary" id="cancel-breakdown-selection" type="button">やめる</button>

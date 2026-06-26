@@ -751,7 +751,9 @@ function updateBreakdownSelectionToolbar() {
   const total = entriesTotal(selected);
   toolbar.classList.toggle("active", breakdownSelectionMode);
   document.querySelector("#breakdown-selection-count").textContent =
-    `${selected.length}件・${yen(total)}円を選択中`;
+    `${selected.length}件選択中`;
+  document.querySelector("#breakdown-selection-total").textContent =
+    `合計 ${yen(total)}円`;
   document.querySelector("#pay-selected-breakdown").disabled = !selected.length || !total;
 }
 
